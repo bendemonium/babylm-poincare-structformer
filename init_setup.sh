@@ -2,7 +2,6 @@ set -e
 
 python3.11 -m venv bb-env
 source bb-env/bin/activate
-source .env
 
 pip install --upgrade pip
 pip install -r requirements.txt
