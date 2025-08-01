@@ -1,3 +1,7 @@
+
+# nano ~/.ssh/config
+
+
 set -e
 
 sudo apt install -y software-properties-common
@@ -13,6 +17,7 @@ pip install -r requirements.txt
 
 pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
+# git clone https://github.com/bendemonium/babylm-poincare-structformer.git
 cd babylm-poincare-structformer
 
 huggingface-cli login

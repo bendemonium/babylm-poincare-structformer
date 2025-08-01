@@ -1,10 +1,9 @@
 flax>=0.8.2
 optax>=0.2.2
-numpy>=1.21
+numpy>=1.21,<2.0
 transformers>=4.35.0
 tqdm
 pyyaml
-pickle5
 python-dotenv
 matplotlib
 seaborn
