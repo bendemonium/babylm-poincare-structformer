@@ -2,3 +2,5 @@
 __pychache__
 trial.py
 bb-env
+data/tokens
+jax-gpu-env

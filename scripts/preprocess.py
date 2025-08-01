@@ -95,3 +95,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     tokenize_and_save(args.split, max_length=args.max_length, batch_size=args.batch_size)
+
+# python scripts/preprocess.py --split train
+# python scripts/preprocess.py --split dev
+# python scripts/preprocess.py --split test
