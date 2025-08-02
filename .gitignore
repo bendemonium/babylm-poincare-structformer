@@ -1,5 +1,5 @@
 .env
-__pychache__
+**/__pychache__/
 trial.py
 bb-env
 data/tokens

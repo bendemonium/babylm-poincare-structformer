@@ -8,8 +8,7 @@ python-dotenv
 matplotlib
 seaborn
 huggingface_hub>=0.21.3
-nnsight
-nnsight[flax]
 huggingface_hub[cli]
+safetensors
 torch
 torchvision
