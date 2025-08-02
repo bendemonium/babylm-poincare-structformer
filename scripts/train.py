@@ -175,3 +175,7 @@ if __name__ == "__main__":
         train_loss = float(np.mean(losses))
         val_loss = eval_epoch(state, val_ids, val_mask, batch_size)
         print(f"✅ Epoch {epoch+1}: Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Words Seen: {words_seen:,}")
+
+
+        # python scripts/train.py --config configs/base.yaml
+        
