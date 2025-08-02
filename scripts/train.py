@@ -1,14 +1,24 @@
-import argparse, yaml, os
-import utils.env
-import numpy as np
+import argparse
+import os
+import sys
+import yaml
 import pickle
-import jax, optax
-from huggingface_hub import HfApi, create_repo, upload_file
 import tempfile
+from dotenv import load_dotenv
+from huggingface_hub import hf_hub_download, HfApi, create_repo
+import jax
 import jax.numpy as jnp
-from flax.training import train_state, checkpoints
+import numpy as np
+import optax
+from tqdm import tqdm
+from flax.training import train_state
 from transformers import AutoTokenizer
 from models.structformer_poincare import StructFormerPoincare
+from nnsight.flax.inspect import trace_layers  # If installed
+
+load_dotenv()
+
+# Academic reference for 0.75 words/token: Brown et al. (2020, GPT-3 paper), Table 3 & A.4.
 
 def batch_data(input_ids, attention_mask, batch_size):
     num_samples = input_ids.shape[0]
@@ -27,10 +37,10 @@ def create_train_state(rng, config, vocab_size):
         max_length=config["seq_length"],
         c=1.0,
     )
-    dummy_input_ids = jnp.ones((1, config["seq_length"]), dtype=jnp.int32)
-    dummy_attention_mask = jnp.ones((1, config["seq_length"]), dtype=jnp.bool_)
-    params = model.init(rng, dummy_input_ids, dummy_attention_mask)["params"]
-    tx = optax.adam(config["learning_rate"])
+    dummy_input = jnp.ones((1, config["seq_length"]), dtype=jnp.int32)
+    dummy_mask = jnp.ones((1, config["seq_length"]), dtype=jnp.bool_)
+    params = model.init(rng, dummy_input, dummy_mask)["params"]
+    tx = optax.adam(float(config["learning_rate"]))
     state = train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
     return state, model
 
@@ -46,55 +56,136 @@ def train_step(state, batch):
     loss = loss_fn(state.params)
     return state, loss
 
+def eval_epoch(state, input_ids, attention_mask, batch_size):
+    losses = []
+    for batch in tqdm(batch_data(input_ids, attention_mask, batch_size), desc="Validating", leave=False):
+        batch = {
+            "input_ids": jnp.array(batch["input_ids"], dtype=jnp.int32),
+            "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
+        }
+        logits = state.apply_fn({"params": state.params}, batch["input_ids"], batch["attention_mask"])
+        labels = batch["input_ids"]
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
+        losses.append(float(loss))
+    return np.mean(losses)
+
+def make_word_milestones(max_words=10_000_000, step=1_000_000):
+    """Make a list of word-milestones per 1M up to max_words (can extend as needed)."""
+    return [step * i for i in range(1, (max_words // step) + 1)]
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file.")
+    parser.add_argument("--config", type=str, required=True, help="Path to config YAML")
     args = parser.parse_args()
 
-    # Load config
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    # Paths
-    train_pkl_file = config.get("train_tokenized_file", "data/train_tokenized.pkl")
-    vocab_name = config.get("vocab_name", "gpt2")
+    # Tokenized data from HF Hub
+    train_pkl_path = hf_hub_download(
+        repo_id=config["train_tokenized_repo"],
+        filename=config["train_tokenized_file"],
+        repo_type="dataset"
+    )
+    val_pkl_path = hf_hub_download(
+        repo_id=config["val_tokenized_repo"],
+        filename=config["val_tokenized_file"],
+        repo_type="dataset"
+    )
 
-    # Create output/checkpoint dir using config file name
-    run_name = os.path.splitext(os.path.basename(args.config))[0]
-    ckpt_dir = os.path.join("checkpoints", run_name)
-    os.makedirs(ckpt_dir, exist_ok=True)
+    with open(train_pkl_path, "rb") as f:
+        train_data = pickle.load(f)
+    with open(val_pkl_path, "rb") as f:
+        val_data = pickle.load(f)
+    train_ids = train_data["input_ids"]        # shape: (N, seq_length)
+    train_mask = train_data["attention_mask"]
+    val_ids = val_data["input_ids"]
+    val_mask = val_data["attention_mask"]
 
-    # Load tokenizer to get vocab size
-    tokenizer = AutoTokenizer.from_pretrained(vocab_name)
+    tokenizer = AutoTokenizer.from_pretrained(config.get("vocab_name", "gpt2"))
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     vocab_size = tokenizer.vocab_size
 
-    # Load tokenized data
-    with open(train_pkl_file, "rb") as f:
-        data = pickle.load(f)
-    input_ids = data["input_ids"]      # shape: (num_examples, seq_length)
-    attention_mask = data["attention_mask"]
-
     rng = jax.random.PRNGKey(config.get("seed", 42))
     state, model = create_train_state(rng, config, vocab_size)
 
-    print(f"Training on {input_ids.shape[0]} samples, {input_ids.shape[1]} tokens per sample.")
+    # HF Hub setup for checkpoints
+    HF_REPO_ID = os.environ["HF_REPO_ID"]
+    create_repo(HF_REPO_ID, repo_type="model", exist_ok=True)
+    api = HfApi()
+
+    print(f"Training on {train_ids.shape[0]} samples, {train_ids.shape[1]} tokens per sample.")
+
+    # BabyLM milestones and word accounting
+    words_per_token = 0.75  # Brown et al., 2020 ("Language Models are Few-Shot Learners")[1]
+    seq_length = train_ids.shape[1]
+    batch_size = config["batch_size"]
+
+    words_seen = 0
+    milestones = make_word_milestones(max_words=10_000_000, step=1_000_000)  # Edit for longer runs
+    next_milestone_idx = 0
+
+    total_tokens = train_ids.shape[0] * train_ids.shape[1]
+    est_total_words = int(total_tokens * words_per_token)
+    print(f"Estimated training words in full set: {est_total_words:,}")
 
     for epoch in range(config["num_epochs"]):
         print(f"\nEpoch {epoch+1}/{config['num_epochs']}")
-        batch_losses = []
-        for batch_idx, batch in enumerate(batch_data(input_ids, attention_mask, config["batch_size"])):
-            # Convert numpy to jax arrays
+        losses = []
+
+        # Progress bar for batches
+        batch_iter = tqdm(
+            list(batch_data(train_ids, train_mask, batch_size)),
+            total=(len(train_ids) // batch_size + 1),
+            desc=f"Training (epoch {epoch+1})"
+        )
+        for batch_idx, batch in enumerate(batch_iter):
             batch_jax = {
                 "input_ids": jnp.array(batch["input_ids"], dtype=jnp.int32),
                 "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
             }
             state, loss = train_step(state, batch_jax)
-            batch_losses.append(loss)
+            losses.append(float(loss))
+
+            # --- Words/Checkpointing ---
+            # Each sample = seq_length tokens, so total tokens in batch:
+            batch_tokens = batch_jax["input_ids"].size
+            batch_words = int(batch_tokens * words_per_token)
+            words_seen += batch_words
+
+            # Upload checkpoint if passing a milestone
+            while (next_milestone_idx < len(milestones)) and (words_seen >= milestones[next_milestone_idx]):
+                milestone = milestones[next_milestone_idx]
+                ckpt_name = f"checkpoint-{milestone//1_000_000}M-words.pkl"
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    ckpt_path = os.path.join(temp_dir, ckpt_name)
+                    with open(ckpt_path, "wb") as f:
+                        pickle.dump(state.params, f)
+                    api.upload_file(
+                        path_or_fileobj=ckpt_path,
+                        path_in_repo=f"checkpoints/{ckpt_name}",
+                        repo_id=HF_REPO_ID,
+                        repo_type="model",
+                        commit_message=f"Checkpoint after {milestone:,} words seen"
+                    )
+                tqdm.write(f"☁ Uploaded {ckpt_name} at {milestone:,} words.")
+                # --- NNsight trace at checkpoint ---
+                try:
+                    with trace_layers(StructFormerPoincare, layers=["layers.*"]) as trace:
+                        dummy = jnp.ones((1, seq_length), dtype=jnp.int32)
+                        mask = jnp.ones((1, seq_length), dtype=jnp.bool_)
+                        _ = model.apply({"params": state.params}, dummy, mask)
+                        print("🧠 NNsight trace captured at milestone checkpoint.")
+                except Exception as e:
+                    print(f"⚠ NNsight trace failed (optional): {e}")
+                next_milestone_idx += 1
+
+            # Print every 100 batches, as well as via tqdm
             if batch_idx % 100 == 0:
-                print(f"Batch {batch_idx}, Loss: {float(loss):.4f}")
-        avg_loss = float(jnp.mean(jnp.stack(batch_losses)))
-        print(f"Epoch {epoch+1} completed. Avg Loss: {avg_loss:.4f}")
-        checkpoints.save_checkpoint(ckpt_dir, state.params, step=epoch+1, overwrite=True)
-    print(f"Training finished. Checkpoints saved in '{ckpt_dir}'")
+                tqdm.write(f"Batch {batch_idx}: Running train loss = {loss:.4f}, words seen = {words_seen:,}")
+
+        avg_loss = float(np.mean(losses))
+        val_loss = eval_epoch(state, val_ids, val_mask, batch_size)
+        print(f"✅ Epoch {epoch+1}: Train loss = {avg_loss:.4f} | Val loss = {val_loss:.4f} | Words seen so far = {words_seen:,}")
+
