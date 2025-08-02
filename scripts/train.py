@@ -146,19 +146,7 @@ if __name__ == "__main__":
                 milestone = milestones[next_milestone_idx]
                 ckpt_base = f"checkpoint-{milestone // 1_000_000}M-words"
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    # Save as Pickle
-                    pkl_path = os.path.join(tmpdir, ckpt_base + ".pkl")
-                    with open(pkl_path, "wb") as f:
-                        pickle.dump(state.params, f)
-                    api.upload_file(
-                        path_or_fileobj=pkl_path,
-                        path_in_repo=f"checkpoints/{ckpt_base}.pkl",
-                        repo_id=HF_REPO_ID,
-                        repo_type="model",
-                        commit_message=f"Checkpoint after {milestone:,} words (pkl)"
-                    )
-
-                    # Save as SafeTensors
+                    # Save as SafeTensors (NO .pkl)
                     st_path = os.path.join(tmpdir, ckpt_base + ".safetensors")
                     save_safetensors(state.params, st_path)
                     api.upload_file(
@@ -169,7 +157,7 @@ if __name__ == "__main__":
                         commit_message=f"Checkpoint after {milestone:,} words (safetensors)"
                     )
 
-                tqdm.write(f"☁ Saved and uploaded {ckpt_base} @ {milestone:,} words seen.")
+                tqdm.write(f"☁ Saved and uploaded {ckpt_base}.safetensors @ {milestone:,} words seen.")
                 next_milestone_idx += 1
 
         train_loss = float(np.mean(losses))
@@ -177,5 +165,5 @@ if __name__ == "__main__":
         print(f"✅ Epoch {epoch+1}: Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Words Seen: {words_seen:,}")
 
 
-        # python scripts/train.py --config configs/base.yaml
-        
+# python scripts/train.py --config configs/base.yaml
+
