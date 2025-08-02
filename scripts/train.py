@@ -5,8 +5,8 @@ import pickle
 import tempfile
 from dotenv import load_dotenv
 from huggingface_hub import hf_hub_download, HfApi, create_repo
-from safetensors.flax import save_file as save_safetensors
-from flax.traverse_util import flatten_dict, unflatten_dict
+from safetensors.numpy import save_file as save_safetensors
+from flax.traverse_util import flatten_dict
 
 import jax
 import jax.numpy as jnp
@@ -20,7 +20,7 @@ from models.structformer_poincare import StructFormerPoincare
 
 load_dotenv()
 
-# ------------------------- Utilities -------------------------
+# ------------------------- Utils -------------------------
 
 def batch_data(input_ids, attention_mask, batch_size):
     for i in range(0, input_ids.shape[0], batch_size):
@@ -29,31 +29,24 @@ def batch_data(input_ids, attention_mask, batch_size):
             "attention_mask": attention_mask[i:i+batch_size],
         }
 
-def make_milestones(max_words=10_000_000, step=1_000_000):
-    return [step * i for i in range(1, (max_words // step) + 1)]
-
-import jax
-import jax.numpy as jnp
-import numpy as np
-from safetensors.numpy import save_file as save_safetensors  # ← use numpy backend!
-from flax.traverse_util import flatten_dict
+def make_milestones(max_words=100_000_000):
+    return (
+        list(range(1_000_000, 10_000_001, 1_000_000)) +
+        list(range(20_000_000, max_words + 1, 10_000_000))
+    )
 
 def sanitize_and_save(params, path):
     flat = flatten_dict(jax.tree_util.tree_map(lambda x: x, params), sep="/")
     safe_flat = {}
-
     for k, v in flat.items():
         if isinstance(v, (np.ndarray, jnp.ndarray)) and v.dtype != object:
             key = k if isinstance(k, str) else "/".join(k)
-            safe_flat[key] = np.array(v)  # Cast to np.ndarray for safety
+            safe_flat[key] = np.array(v)
         else:
             print(f"⚠️ Skipping {k} due to invalid dtype: {getattr(v, 'dtype', type(v))}")
-
     save_safetensors(safe_flat, path)
 
-
-
-# ------------------------- Model Logic -------------------------
+# ------------------------ Model Parts ------------------------
 
 def create_train_state(rng, config, vocab_size):
     model = StructFormerPoincare(
@@ -83,20 +76,23 @@ def train_step(state, batch):
     loss = loss_fn(state.params)
     return state, loss
 
+def eval_step(params, apply_fn, input_ids, attention_mask):
+    logits = apply_fn({"params": params}, input_ids, attention_mask)
+    return logits
+
+eval_step_jit = jax.jit(eval_step, static_argnames=["apply_fn"])
+
 def eval_epoch(state, input_ids, attention_mask, batch_size):
     losses = []
     for batch in tqdm(batch_data(input_ids, attention_mask, batch_size), desc="Validating", leave=False):
-        batch = {
-            "input_ids": jnp.array(batch["input_ids"], dtype=jnp.int32),
-            "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
-        }
-        logits = state.apply_fn({"params": state.params}, batch["input_ids"], batch["attention_mask"])
-        labels = batch["input_ids"]
-        loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
+        batch_ids = jnp.array(batch["input_ids"], dtype=jnp.int32)
+        batch_mask = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
+        logits = eval_step_jit(state.params, state.apply_fn, batch_ids, batch_mask)
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch_ids).mean()
         losses.append(float(loss))
     return np.mean(losses)
 
-# ------------------------- Main -------------------------
+# ------------------------ Main ------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -110,7 +106,6 @@ if __name__ == "__main__":
     create_repo(HF_REPO_ID, repo_type="model", exist_ok=True)
     api = HfApi()
 
-    # Load tokenized data
     train_path = hf_hub_download(
         repo_id=config["train_tokenized_repo"],
         filename=config["train_tokenized_file"],
@@ -143,10 +138,9 @@ if __name__ == "__main__":
     print(f"🧃 Training on {len(train_ids)} examples ({len(train_ids) * config['seq_length']:,} tokens)")
     print(f"📏 Val set size: {len(val_ids)} examples ({len(val_ids) * config['seq_length']:,} tokens)")
 
-    # BabyLM tracking: words seen
     words_per_token = 0.75
     words_seen = 0
-    milestones = make_milestones(max_words=10_000_000, step=1_000_000)
+    milestones = make_milestones(max_words=100_000_000)
     next_milestone_idx = 0
 
     for epoch in range(config["num_epochs"]):
@@ -161,29 +155,26 @@ if __name__ == "__main__":
             state, loss = train_step(state, batch_jax)
             losses.append(float(loss))
 
-            # Track words seen
             batch_tokens = batch_jax["input_ids"].size
             words_seen += int(batch_tokens * words_per_token)
 
-            # Check milestone
             while next_milestone_idx < len(milestones) and words_seen >= milestones[next_milestone_idx]:
                 milestone = milestones[next_milestone_idx]
-                ckpt_base = f"checkpoint-{milestone // 1_000_000}M-words"
+                ckpt_name = f"checkpoint-{milestone // 1_000_000}M-words.safetensors"
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    st_path = os.path.join(tmpdir, ckpt_base + ".safetensors")
-                    sanitize_and_save(state.params, st_path)
+                    path = os.path.join(tmpdir, ckpt_name)
+                    sanitize_and_save(state.params, path)
                     api.upload_file(
-                        path_or_fileobj=st_path,
-                        path_in_repo=f"checkpoints/{ckpt_base}.safetensors",
+                        path_or_fileobj=path,
+                        path_in_repo=f"checkpoints/{ckpt_name}",
                         repo_id=HF_REPO_ID,
                         repo_type="model",
-                        commit_message=f"Checkpoint after {milestone:,} words (safetensors)"
+                        commit_message=f"Checkpoint at {milestone:,} words"
                     )
-                tqdm.write(f"☁️ Uploaded {ckpt_base}.safetensors after {milestone:,} words.")
+                tqdm.write(f"☁ Uploaded {ckpt_name} after {milestone:,} words seen.")
                 next_milestone_idx += 1
 
-        # End of epoch - evaluate
         train_loss = float(np.mean(losses))
         val_loss = eval_epoch(state, val_ids, val_mask, config["batch_size"])
-        print(f"✅ Epoch {epoch+1}: Train Loss = {train_loss:.4f} | Val Loss = {val_loss:.4f} | Words seen = {words_seen:,}")
+        print(f"✅ Epoch {epoch+1} → Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Words: {words_seen:,}")
 
