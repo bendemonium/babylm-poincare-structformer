@@ -1,26 +1,25 @@
+# scripts/train.py
+
 import argparse
 import os
 import yaml
 import pickle
 import tempfile
-from dotenv import load_dotenv
-from huggingface_hub import hf_hub_download, HfApi, create_repo
-from safetensors.numpy import save_file as save_safetensors
-from flax.traverse_util import flatten_dict
-
+import numpy as np
 import jax
 import jax.numpy as jnp
-import numpy as np
-import optax
+from dotenv import load_dotenv
 from tqdm import tqdm
+from huggingface_hub import HfApi, create_repo, hf_hub_download
+from safetensors.numpy import save_file as save_safetensors
 from flax.training import train_state
 from transformers import AutoTokenizer
+from flax.traverse_util import flatten_dict
 
 from models.structformer_poincare import StructFormerPoincare
+from utils.export_hf import export_model_to_huggingface, sanitize
 
 load_dotenv()
-
-# ------------------------- Utils -------------------------
 
 def batch_data(input_ids, attention_mask, batch_size):
     for i in range(0, input_ids.shape[0], batch_size):
@@ -35,19 +34,6 @@ def make_milestones(max_words=100_000_000):
         list(range(20_000_000, max_words + 1, 10_000_000))
     )
 
-def sanitize_and_save(params, path):
-    flat = flatten_dict(jax.tree_util.tree_map(lambda x: x, params), sep="/")
-    safe_flat = {}
-    for k, v in flat.items():
-        if isinstance(v, (np.ndarray, jnp.ndarray)) and v.dtype != object:
-            key = k if isinstance(k, str) else "/".join(k)
-            safe_flat[key] = np.array(v)
-        else:
-            print(f"⚠️ Skipping {k} due to invalid dtype: {getattr(v, 'dtype', type(v))}")
-    save_safetensors(safe_flat, path)
-
-# ------------------------ Model Parts ------------------------
-
 def create_train_state(rng, config, vocab_size):
     model = StructFormerPoincare(
         vocab_size=vocab_size,
@@ -57,42 +43,38 @@ def create_train_state(rng, config, vocab_size):
         max_length=config["seq_length"],
         c=1.0,
     )
-    dummy_input = jnp.ones((1, config["seq_length"]), dtype=jnp.int32)
-    dummy_mask = jnp.ones((1, config["seq_length"]), dtype=jnp.bool_)
-    params = model.init(rng, dummy_input, dummy_mask)["params"]
+    dummy_in = jnp.ones((1, config["seq_length"]), dtype=jnp.int32)
+    dummy_mask = jnp.ones_like(dummy_in, dtype=jnp.bool_)
+    params = model.init(rng, dummy_in, dummy_mask)["params"]
     tx = optax.adam(float(config["learning_rate"]))
-    state = train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
-    return state, model
+    return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx), model
 
 @jax.jit
 def train_step(state, batch):
     def loss_fn(params):
         logits = state.apply_fn({"params": params}, batch["input_ids"], batch["attention_mask"])
-        labels = batch["input_ids"]
-        loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch["input_ids"]).mean()
         return loss
     grads = jax.grad(loss_fn)(state.params)
-    state = state.apply_gradients(grads=grads)
-    loss = loss_fn(state.params)
-    return state, loss
+    return state.apply_gradients(grads=grads), loss_fn(state.params)
 
+@jax.jit
 def eval_step(params, apply_fn, input_ids, attention_mask):
-    logits = apply_fn({"params": params}, input_ids, attention_mask)
-    return logits
+    return apply_fn({"params": params}, input_ids, attention_mask)
 
-eval_step_jit = jax.jit(eval_step, static_argnames=["apply_fn"])
-
-def eval_epoch(state, input_ids, attention_mask, batch_size):
+def eval_epoch_fast(state, input_ids, attention_mask, batch_size, n_batches=32):
+    N = input_ids.shape[0]
+    idx = np.random.choice(N, min(N, n_batches * batch_size), replace=False)
+    ids = input_ids[idx]
+    mask = attention_mask[idx]
     losses = []
-    for batch in tqdm(batch_data(input_ids, attention_mask, batch_size), desc="Validating", leave=False):
-        batch_ids = jnp.array(batch["input_ids"], dtype=jnp.int32)
-        batch_mask = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
-        logits = eval_step_jit(state.params, state.apply_fn, batch_ids, batch_mask)
-        loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch_ids).mean()
+    for batch in batch_data(ids, mask, batch_size):
+        ids_ = jnp.array(batch["input_ids"], dtype=jnp.int32)
+        msks = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
+        logits = eval_step(state.params, state.apply_fn, ids_, msks)
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, ids_).mean()
         losses.append(float(loss))
     return np.mean(losses)
-
-# ------------------------ Main ------------------------
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -103,29 +85,18 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     HF_REPO_ID = os.environ["HF_REPO_ID"]
-    create_repo(HF_REPO_ID, repo_type="model", exist_ok=True)
+    create_repo(HF_REPO_ID, exist_ok=True, repo_type="model")
     api = HfApi()
 
-    train_path = hf_hub_download(
-        repo_id=config["train_tokenized_repo"],
-        filename=config["train_tokenized_file"],
-        repo_type="dataset"
-    )
-    val_path = hf_hub_download(
-        repo_id=config["val_tokenized_repo"],
-        filename=config["val_tokenized_file"],
-        repo_type="dataset"
-    )
-
+    train_path = hf_hub_download(config["train_tokenized_repo"], config["train_tokenized_file"], repo_type="dataset")
+    val_path = hf_hub_download(config["val_tokenized_repo"], config["val_tokenized_file"], repo_type="dataset")
     with open(train_path, "rb") as f:
-        train_data = pickle.load(f)
+        train = pickle.load(f)
     with open(val_path, "rb") as f:
-        val_data = pickle.load(f)
+        val = pickle.load(f)
 
-    train_ids = train_data["input_ids"]
-    train_mask = train_data["attention_mask"]
-    val_ids = val_data["input_ids"]
-    val_mask = val_data["attention_mask"]
+    train_ids, train_mask = train["input_ids"], train["attention_mask"]
+    val_ids, val_mask = val["input_ids"], val["attention_mask"]
 
     tokenizer = AutoTokenizer.from_pretrained(config.get("vocab_name", "gpt2"))
     if tokenizer.pad_token is None:
@@ -135,46 +106,47 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(config.get("seed", 42))
     state, model = create_train_state(rng, config, vocab_size)
 
-    print(f"🧃 Training on {len(train_ids)} examples ({len(train_ids) * config['seq_length']:,} tokens)")
-    print(f"📏 Val set size: {len(val_ids)} examples ({len(val_ids) * config['seq_length']:,} tokens)")
-
     words_per_token = 0.75
+    milestones = make_milestones()
+    next_idx = 0
     words_seen = 0
-    milestones = make_milestones(max_words=100_000_000)
-    next_milestone_idx = 0
 
     for epoch in range(config["num_epochs"]):
-        print(f"\n🔁 Epoch {epoch+1}/{config['num_epochs']}")
-        losses = []
+        print(f"\n🔁 Epoch {epoch+1}")
+        epoch_loss = []
 
-        for batch_idx, batch in enumerate(tqdm(batch_data(train_ids, train_mask, config["batch_size"]), desc="Training")):
+        for batch in tqdm(batch_data(train_ids, train_mask, config["batch_size"]), desc="Training"):
             batch_jax = {
                 "input_ids": jnp.array(batch["input_ids"], dtype=jnp.int32),
                 "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
             }
             state, loss = train_step(state, batch_jax)
-            losses.append(float(loss))
+            epoch_loss.append(float(loss))
 
-            batch_tokens = batch_jax["input_ids"].size
-            words_seen += int(batch_tokens * words_per_token)
+            words_seen += int(batch_jax["input_ids"].size * words_per_token)
 
-            while next_milestone_idx < len(milestones) and words_seen >= milestones[next_milestone_idx]:
-                milestone = milestones[next_milestone_idx]
+            while next_idx < len(milestones) and words_seen >= milestones[next_idx]:
+                milestone = milestones[next_idx]
                 ckpt_name = f"checkpoint-{milestone // 1_000_000}M-words.safetensors"
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    path = os.path.join(tmpdir, ckpt_name)
-                    sanitize_and_save(state.params, path)
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = os.path.join(tmp, ckpt_name)
+                    save_safetensors(sanitize(state.params), path)
                     api.upload_file(
+                        repo_id=HF_REPO_ID,
                         path_or_fileobj=path,
                         path_in_repo=f"checkpoints/{ckpt_name}",
-                        repo_id=HF_REPO_ID,
-                        repo_type="model",
-                        commit_message=f"Checkpoint at {milestone:,} words"
+                        commit_message=f"Checkpoint @ {milestone:,} words",
+                        repo_type="model"
                     )
-                tqdm.write(f"☁ Uploaded {ckpt_name} after {milestone:,} words seen.")
-                next_milestone_idx += 1
+                next_idx += 1
 
-        train_loss = float(np.mean(losses))
-        val_loss = eval_epoch(state, val_ids, val_mask, config["batch_size"])
-        print(f"✅ Epoch {epoch+1} → Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Words: {words_seen:,}")
+        val_loss = eval_epoch_fast(state, val_ids, val_mask, config["batch_size"])
+        print(f"✅ Epoch {epoch+1} → Train: {np.mean(epoch_loss):.4f} | Fast Val: {val_loss:.4f} | Words: {words_seen:,}")
 
+    if os.getenv("HF_MODEL_EXPORT", "no").lower() == "yes":
+        export_model_to_huggingface(
+            state.params,
+            config,
+            repo_id=os.getenv("HF_REPO_ID"),
+            commit_message=f"Final export after {words_seen:,} words"
+        )
