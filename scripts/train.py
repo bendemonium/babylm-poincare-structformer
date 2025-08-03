@@ -1,5 +1,3 @@
-# scripts/train.py
-
 import argparse
 import os
 import yaml
@@ -13,19 +11,20 @@ from tqdm import tqdm
 from huggingface_hub import HfApi, create_repo, hf_hub_download
 from safetensors.numpy import save_file as save_safetensors
 from flax.training import train_state
-from transformers import AutoTokenizer
 from flax.traverse_util import flatten_dict
+from transformers import AutoTokenizer
 
 from models.structformer_poincare import StructFormerPoincare
-from utils.export_hf import export_model_to_huggingface, sanitize
+from utils.export_hf import sanitize, export_model_to_huggingface
 
 load_dotenv()
 
-def batch_data(input_ids, attention_mask, batch_size):
-    for i in range(0, input_ids.shape[0], batch_size):
+
+def batch_data(ids, masks, batch_size):
+    for i in range(0, ids.shape[0], batch_size):
         yield {
-            "input_ids": input_ids[i:i+batch_size],
-            "attention_mask": attention_mask[i:i+batch_size],
+            "input_ids": ids[i:i+batch_size],
+            "attention_mask": masks[i:i+batch_size],
         }
 
 def make_milestones(max_words=100_000_000):
@@ -43,10 +42,10 @@ def create_train_state(rng, config, vocab_size):
         max_length=config["seq_length"],
         c=1.0,
     )
-    dummy_in = jnp.ones((1, config["seq_length"]), dtype=jnp.int32)
-    dummy_mask = jnp.ones_like(dummy_in, dtype=jnp.bool_)
-    params = model.init(rng, dummy_in, dummy_mask)["params"]
-    tx = optax.adam(float(config["learning_rate"]))
+    dummy = jnp.ones((1, config["seq_length"]), dtype=jnp.int32)
+    mask = jnp.ones_like(dummy, dtype=jnp.bool_)
+    params = model.init(rng, dummy, mask)["params"]
+    tx = optax.adam(config["learning_rate"])
     return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx), model
 
 @jax.jit
@@ -63,18 +62,21 @@ def eval_step(params, apply_fn, input_ids, attention_mask):
     return apply_fn({"params": params}, input_ids, attention_mask)
 
 def eval_epoch_fast(state, input_ids, attention_mask, batch_size, n_batches=32):
-    N = input_ids.shape[0]
-    idx = np.random.choice(N, min(N, n_batches * batch_size), replace=False)
+    total = input_ids.shape[0]
+    idx = np.random.choice(total, min(n_batches * batch_size, total), replace=False)
     ids = input_ids[idx]
-    mask = attention_mask[idx]
+    masks = attention_mask[idx]
     losses = []
-    for batch in batch_data(ids, mask, batch_size):
-        ids_ = jnp.array(batch["input_ids"], dtype=jnp.int32)
-        msks = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
-        logits = eval_step(state.params, state.apply_fn, ids_, msks)
-        loss = optax.softmax_cross_entropy_with_integer_labels(logits, ids_).mean()
+
+    for batch in batch_data(ids, masks, batch_size):
+        x = jnp.array(batch["input_ids"], dtype=jnp.int32)
+        m = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
+        logits = eval_step(state.params, state.apply_fn, x, m)
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, x).mean()
         losses.append(float(loss))
+
     return np.mean(losses)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -85,9 +87,10 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     HF_REPO_ID = os.environ["HF_REPO_ID"]
-    create_repo(HF_REPO_ID, exist_ok=True, repo_type="model")
+    create_repo(HF_REPO_ID, repo_type="model", exist_ok=True)
     api = HfApi()
 
+    # Load tokenized data
     train_path = hf_hub_download(config["train_tokenized_repo"], config["train_tokenized_file"], repo_type="dataset")
     val_path = hf_hub_download(config["val_tokenized_repo"], config["val_tokenized_file"], repo_type="dataset")
     with open(train_path, "rb") as f:
@@ -98,22 +101,23 @@ if __name__ == "__main__":
     train_ids, train_mask = train["input_ids"], train["attention_mask"]
     val_ids, val_mask = val["input_ids"], val["attention_mask"]
 
-    tokenizer = AutoTokenizer.from_pretrained(config.get("vocab_name", "gpt2"))
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = AutoTokenizer.from_pretrained(config["vocab_name"])
+    pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
     vocab_size = tokenizer.vocab_size
 
     rng = jax.random.PRNGKey(config.get("seed", 42))
     state, model = create_train_state(rng, config, vocab_size)
 
-    words_per_token = 0.75
+    print(f"🧃 Training on {len(train_ids)} examples ({len(train_ids) * config['seq_length']:,} tokens)")
+    print(f"📏 Val set: {len(val_ids)} examples")
+
     milestones = make_milestones()
     next_idx = 0
     words_seen = 0
 
     for epoch in range(config["num_epochs"]):
         print(f"\n🔁 Epoch {epoch+1}")
-        epoch_loss = []
+        losses = []
 
         for batch in tqdm(batch_data(train_ids, train_mask, config["batch_size"]), desc="Training"):
             batch_jax = {
@@ -121,32 +125,39 @@ if __name__ == "__main__":
                 "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
             }
             state, loss = train_step(state, batch_jax)
-            epoch_loss.append(float(loss))
+            losses.append(float(loss))
 
-            words_seen += int(batch_jax["input_ids"].size * words_per_token)
+            # Count only non-pad tokens for words_seen
+            non_padded = (np.array(batch_jax["input_ids"]) != pad_id).sum()
+            words_in_batch = int(non_padded * 0.75)  # GPT2 estimate
+            words_seen += words_in_batch
 
             while next_idx < len(milestones) and words_seen >= milestones[next_idx]:
                 milestone = milestones[next_idx]
                 ckpt_name = f"checkpoint-{milestone // 1_000_000}M-words.safetensors"
                 with tempfile.TemporaryDirectory() as tmp:
                     path = os.path.join(tmp, ckpt_name)
-                    save_safetensors(sanitize(state.params), path)
+                    save_file = sanitize(state.params)
+                    save_safetensors(save_file, path)
                     api.upload_file(
-                        repo_id=HF_REPO_ID,
                         path_or_fileobj=path,
                         path_in_repo=f"checkpoints/{ckpt_name}",
-                        commit_message=f"Checkpoint @ {milestone:,} words",
-                        repo_type="model"
+                        repo_id=HF_REPO_ID,
+                        repo_type="model",
+                        commit_message=f"Checkpoint @ {milestone:,} words"
                     )
+                tqdm.write(f"☁️ Saved {ckpt_name} at {milestone:,} words")
                 next_idx += 1
 
         val_loss = eval_epoch_fast(state, val_ids, val_mask, config["batch_size"])
-        print(f"✅ Epoch {epoch+1} → Train: {np.mean(epoch_loss):.4f} | Fast Val: {val_loss:.4f} | Words: {words_seen:,}")
+        print(f"✅ Epoch {epoch+1}: Train Loss = {np.mean(losses):.4f} | Val Loss ≈ {val_loss:.4f} | Words Seen = {words_seen:,}")
 
     if os.getenv("HF_MODEL_EXPORT", "no").lower() == "yes":
         export_model_to_huggingface(
             state.params,
             config,
-            repo_id=os.getenv("HF_REPO_ID"),
-            commit_message=f"Final export after {words_seen:,} words"
+            repo_id=HF_REPO_ID,
+            commit_message=f"Final model after {words_seen:,} words"
         )
+
+# python scripts/train.py --config configs/base.yaml

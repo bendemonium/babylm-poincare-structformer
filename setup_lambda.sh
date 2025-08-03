@@ -17,9 +17,8 @@
 # pip install --upgrade pip
 
 
-# pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 # pip uninstall numpy -y
-# pip install numpy<2.0
+# pip install "numpy<2.0"
 
 # pip install -r requirements.txt
 # # git clone https://github.com/bendemonium/babylm-poincare-structformer.git
@@ -42,4 +41,6 @@
 # source bb-env/bin/activate
 # pip install --upgrade pip
 # pip install --upgrade "jax[cuda12]"
+# pip uninstall numpy -y
+# pip install "numpy<2.0"
 # python -c "import jax; print(jax.__version__); print(jax.devices())"
