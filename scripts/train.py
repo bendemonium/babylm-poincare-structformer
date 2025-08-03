@@ -6,6 +6,7 @@ import tempfile
 import numpy as np
 import jax
 import jax.numpy as jnp
+import optax
 from dotenv import load_dotenv
 from tqdm import tqdm
 from huggingface_hub import HfApi, create_repo, hf_hub_download
@@ -57,21 +58,27 @@ def train_step(state, batch):
     grads = jax.grad(loss_fn)(state.params)
     return state.apply_gradients(grads=grads), loss_fn(state.params)
 
-@jax.jit
 def eval_step(params, apply_fn, input_ids, attention_mask):
+    # Run the model forward given frozen weights
     return apply_fn({"params": params}, input_ids, attention_mask)
+eval_step_jit = jax.jit(eval_step, static_argnames=["apply_fn"])
 
 def eval_epoch_fast(state, input_ids, attention_mask, batch_size, n_batches=32):
-    total = input_ids.shape[0]
-    idx = np.random.choice(total, min(n_batches * batch_size, total), replace=False)
-    ids = input_ids[idx]
-    masks = attention_mask[idx]
-    losses = []
+    total_examples = input_ids.shape[0]
+    sample_size = min(n_batches * batch_size, total_examples)
+    selected_indices = np.random.choice(total_examples, size=sample_size, replace=False)
 
-    for batch in batch_data(ids, masks, batch_size):
+    sample_input_ids = input_ids[selected_indices]
+    sample_attention_mask = attention_mask[selected_indices]
+
+    losses = []
+    for batch in tqdm(
+        batch_data(sample_input_ids, sample_attention_mask, batch_size),
+        desc="Validating (subset)", leave=False
+    ):
         x = jnp.array(batch["input_ids"], dtype=jnp.int32)
         m = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
-        logits = eval_step(state.params, state.apply_fn, x, m)
+        logits = eval_step_jit(state.params, state.apply_fn, x, m)
         loss = optax.softmax_cross_entropy_with_integer_labels(logits, x).mean()
         losses.append(float(loss))
 
