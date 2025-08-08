@@ -79,3 +79,5 @@ if __name__ == "__main__":
         max_length=args.max_length,
         batch_size=args.batch_size,
     )
+
+# python scripts/preprocess.py --split train

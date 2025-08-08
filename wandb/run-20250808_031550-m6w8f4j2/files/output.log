@@ -1,0 +1,47 @@
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0; huggingface_hub/0.34.3; pyarrow/21.0.0; jax/0.6.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/README.md
+Request b44db1a4-4481-437a-9285-c07ddc5bff76: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/README.md (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0; huggingface_hub/0.34.3; pyarrow/21.0.0; jax/0.6.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/babylm25_bpe_tokens.py
+Request 6d2b5cf3-5cbc-4981-ada1-1390c35d6860: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/babylm25_bpe_tokens.py (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'User-Agent: datasets/4.0.0; python/3.10.12; huggingface_hub/0.34.3; pyarrow/21.0.0; torch/2.7.0; tensorflow/2.19.0; jax/0.6.0' https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/bendemonium/babylm25_bpe_tokens/bendemonium/babylm25_bpe_tokens.py
+Request b382e7b3-a92a-4545-946c-02ddedf3a18a: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/bendemonium/babylm25_bpe_tokens/bendemonium/babylm25_bpe_tokens.py (authenticated: False)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Request 3f22b541-d203-40fb-bb19-ec94c310ce92: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0; huggingface_hub/0.34.3; pyarrow/21.0.0; jax/0.6.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/.huggingface.yaml
+Request 2ac4c0c1-8667-4283-9902-e7b60e4456dc: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/.huggingface.yaml (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' 'https://datasets-server.huggingface.co/info?dataset=bendemonium/babylm25_bpe_tokens'
+Request 0f96bf2c-7794-42b9-8257-2e535a2fd780: GET https://datasets-server.huggingface.co/info?dataset=bendemonium/babylm25_bpe_tokens (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Request d2712348-b24d-4d89-8ead-4f4366263729: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' 'https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d?recursive=False&expand=False'
+Request 9bea98a2-1aac-4f36-9cdd-da91bf8b776f: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d?recursive=False&expand=False (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' 'https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d/data?recursive=False&expand=False'
+Request 68352fe6-f042-48ba-9741-c1099a504963: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d/data?recursive=False&expand=False (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Request 5be1aa20-8123-4955-aa5b-94b60c19dace: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Request f7e3df0b-3ebe-4a81-b355-f96bb7e4d1dd: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0; huggingface_hub/0.34.3; pyarrow/21.0.0; jax/0.6.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/dataset_infos.json
+Request 991c8073-8e65-4861-9fda-232ba583fe6a: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/dataset_infos.json (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0; transformers/4.55.0; session_id/8c0c3ee0290244b6bc5d0248d76b47d8' https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Request 7bb0d013-d331-4dd5-9c5e-9044ff4c4d8a: HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' 'https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False'
+Request 083d27e7-3ed7-446e-927c-3a6c5b8ee0de: GET https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate, br' -H 'Connection: keep-alive' -H 'X-Amzn-Trace-Id: 083d27e7-3ed7-446e-927c-3a6c5b8ee0de' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.3; python/3.10.12; torch/2.7.0; tensorflow/2.19.0' 'https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False'
+Request 083d27e7-3ed7-446e-927c-3a6c5b8ee0de: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False (authenticated: True)
+✨ Starting training with 1,165,314 training and 1,156,066 validation examples
+
+🔁 Epoch 1
+Training batches:   9%|███████                                                                    | 854/9105 [03:09<30:33,  4.50it/s]
+
+📤 Pushing checkpoint branch: checkpoint-1M-words
+✅ Wrote config.json to /tmp/tmpd6053rso/config.json
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 216, in <module>
+    main()
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 167, in main
+    save_checkpoint_branch(
+  File "/home/ubuntu/babylm-poincare-structformer/utils/save_utils.py", line 132, in save_checkpoint_branch
+    subprocess.run(["git", "push", "--force", "origin", branch_name], check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['git', 'push', '--force', 'origin', 'checkpoint-1M-words']' returned non-zero exit status 1.

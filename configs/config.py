@@ -7,7 +7,7 @@ class StructformerConfig(PretrainedConfig):
         self,
         hidden_dim: int = 512,
         num_heads: int = 8,
-        num_layers: int = 4,
+        num_layers: int = 6,
         max_length: int = 128,
         vocab_size: int = 50257,
         c: float = 1.0,

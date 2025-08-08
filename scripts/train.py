@@ -59,7 +59,7 @@ def train_step(state, batch):
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (loss, (ce_loss, poincare_loss)), grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
-    return state, float(ce_loss), float(poincare_loss)
+    return state, ce_loss, poincare_loss
 
 
 @jax.jit
@@ -142,6 +142,8 @@ def main():
                 "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
             }
             state, ce_loss, p_loss = train_step(state, batch_jax)
+            ce_loss = float(ce_loss)
+            p_loss = float(p_loss)
 
             train_losses.append(ce_loss)
             poincare_losses.append(p_loss)

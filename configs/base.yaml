@@ -1,19 +1,47 @@
-# Training settings
-num_epochs: 5
-batch_size: 128
-learning_rate: 0.0001
-seq_length: 128
-hidden_dim: 256
-num_heads: 8
-num_layers: 4
-seed: 42
+# # Training settings
+# num_epochs: 5
+# batch_size: 128
+# learning_rate: 0.0001
+# seq_length: 128
+# hidden_dim: 256
+# num_heads: 8
+# num_layers: 4
+# seed: 42
 
-# Tokenizer and vocabulary
-vocab_name: gpt2
+# # Tokenizer and vocabulary
+# vocab_name: gpt2
 
-# Hugging Face Datasets (for tokenized input data)
-train_tokenized_repo: bendemonium/babylm25_bpe_tokens
-train_tokenized_file: train_tokenized.pkl
+# # Hugging Face Datasets (for tokenized input data)
+# train_tokenized_repo: bendemonium/babylm25_bpe_tokens
+# train_tokenized_file: train_tokenized.pkl
 
-val_tokenized_repo: bendemonium/babylm25_bpe_tokens
-val_tokenized_file: dev_tokenized.pkl
+# val_tokenized_repo: bendemonium/babylm25_bpe_tokens
+# val_tokenized_file: dev_tokenized.pkl
+
+# Dataset and tokenizer settings
+train_tokenized_repo: your-username/your-tokenized-dataset-repo
+train_tokenized_file: null         # Not used if loading dataset splits directly with Hugging Face datasets library
+val_tokenized_repo: null           # Same as above; usually your dataset repo handles splits
+val_tokenized_file: null
+
+vocab_name: gpt2                   # Hugging Face tokenizer/model name
+
+# Model architecture hyperparameters
+hidden_dim: 256                   # Embedding / hidden layer dimension size
+num_heads: 8                     # Number of attention heads
+num_layers: 4                    # Number of transformer layers
+seq_length: 128                  # Max input sequence length
+c: 1.0                          # Hyperbolic geometry parameter if applicable
+
+# Training hyperparameters
+batch_size: 128                  # Training batch size
+learning_rate: 0.0001             # Optimizer learning rate
+num_epochs: 5                  # Total number of training epochs
+seed: 42                       # Random seed for reproducibility
+
+# Logging and experiment tracking (optional)
+wandb_project: structformer-flax
+wandb_run_name: run-001
+
+# Other flags/settings can be added here as needed
+

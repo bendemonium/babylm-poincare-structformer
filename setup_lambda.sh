@@ -44,3 +44,8 @@
 # pip uninstall numpy -y
 # pip install "numpy<2.0"
 # python -c "import jax; print(jax.__version__); print(jax.devices())"
+
+# sudo apt install git-lfs
+# git lfs install
+# git lfs track "*.safetensors"
+# git add .gitattributes

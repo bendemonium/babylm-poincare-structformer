@@ -21,7 +21,7 @@ class PoincareHierarchicalBlock(nn.Module):
         hyp_output = mobius_add(x, attn, c=self.c)
         return hyp_output
 
-class StructFormerPoincare(nn.Module):
+class StructformerPoincare(nn.Module):
     vocab_size: int
     hidden_dim: int = 512
     num_heads: int = 8
