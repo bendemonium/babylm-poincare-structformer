@@ -19,10 +19,10 @@
 # val_tokenized_file: dev_tokenized.pkl
 
 # Dataset and tokenizer settings
-train_tokenized_repo: your-username/your-tokenized-dataset-repo
-train_tokenized_file: null         # Not used if loading dataset splits directly with Hugging Face datasets library
-val_tokenized_repo: null           # Same as above; usually your dataset repo handles splits
-val_tokenized_file: null
+train_tokenized_repo: bendemonium/babylm25_bpe_tokens
+train_tokenized_file: train_tokenized.pkl     # Not used if loading dataset splits directly with Hugging Face datasets library
+val_tokenized_repo: bendemonium/babylm25_bpe_tokens         
+val_tokenized_file: dev_tokenized.pkl   
 
 vocab_name: gpt2                   # Hugging Face tokenizer/model name
 

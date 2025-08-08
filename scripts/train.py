@@ -68,24 +68,57 @@ def eval_step(params, apply_fn, input_ids, attention_mask):
     return optax.softmax_cross_entropy_with_integer_labels(logits, input_ids).mean()
 
 
-def eval_epoch(state, ds, batch_size, max_batches=32):
-    # Sample subset for validation
-    num_samples = min(len(ds), batch_size * max_batches)
-    idx = np.random.choice(len(ds), size=num_samples, replace=False)
+def eval_epoch(state, val_data, batch_size, dataset_type="hf", max_batches=32):
+
     losses = []
-    for start in range(0, num_samples, batch_size):
-        batch_idx = idx[start : start + batch_size]
-        batch = ds.select(batch_idx)
-        x = jnp.array(batch["input_ids"], dtype=jnp.int32)
-        m = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
-        loss = eval_step(state.params, state.apply_fn, x, m)
-        losses.append(float(loss))
-    return np.mean(losses)
+
+    if dataset_type == "pickle":
+        # val_data is a dict with NumPy arrays
+        input_ids = val_data["input_ids"]
+        attention_mask = val_data["attention_mask"]
+        total_samples = len(input_ids)
+        num_samples = min(total_samples, batch_size * max_batches)
+
+        indices = np.random.choice(total_samples, size=num_samples, replace=False)
+
+        for start in range(0, num_samples, batch_size):
+            idx = indices[start : start + batch_size]
+            x = jnp.array(input_ids[idx], dtype=jnp.int32)
+            m = jnp.array(attention_mask[idx], dtype=jnp.bool_)
+            loss = eval_step(state.params, state.apply_fn, x, m)
+            losses.append(float(loss))
+
+    else:  # assume Hugging Face Dataset
+        total_samples = len(val_data)
+        num_samples = min(total_samples, batch_size * max_batches)
+
+        indices = np.random.choice(total_samples, size=num_samples, replace=False)
+
+        for start in range(0, num_samples, batch_size):
+            idx = indices[start : start + batch_size]
+            batch = val_data.select(idx)
+            x = jnp.array(batch["input_ids"], dtype=jnp.int32)
+            m = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
+            loss = eval_step(state.params, state.apply_fn, x, m)
+            losses.append(float(loss))
+
+    return np.mean(losses) if losses else float("inf")
+
+
+def load_pickle_from_hub(repo_id, filename):
+    from huggingface_hub import hf_hub_download
+    path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+    import pickle
+    with open(path, "rb") as f:
+        return pickle.load(f)
 
 
 def main():
     parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--dataset-type", type=str, choices=["hf", "pickle"], default="hf",
+                    help="Dataset backend to use: 'hf' for datasets.load_dataset or 'pickle' for pickled pkl files.")
     parser.add_argument("--use_wandb", action="store_true", help="Enable Weights & Biases logging")
     parser.add_argument("--use_tensorboard", action="store_true", help="Enable TensorBoard logging")
     args = parser.parse_args()
@@ -106,14 +139,21 @@ def main():
         tb_writer = init_tensorboard()
 
     # Load dataset splits
-    ds = load_dataset(HF_TOKENIZED_DATASET_REPO)
-    train_ds = ds["train"]
-    if "dev" in ds:
-        val_ds = ds["dev"]
-    elif "validation" in ds:
-        val_ds = ds["validation"]
+    dataset_type = args.dataset_type
+
+    if dataset_type == "hf":
+        ds = load_dataset(HF_TOKENIZED_DATASET_REPO)
+        train_ds = ds["train"]
+        val_ds = ds.get("dev") or ds.get("validation") or ds["test"]
+    elif dataset_type == "pickle":
+        assert config["train_tokenized_repo"] and config["train_tokenized_file"], "Train pickle config missing"
+        train = load_pickle_from_hub(config["train_tokenized_repo"], config["train_tokenized_file"])
+        val = load_pickle_from_hub(config["val_tokenized_repo"], config["val_tokenized_file"])
+
+        train_ds = train
+        val_ds = val
     else:
-        val_ds = ds["test"]
+        raise ValueError(f"Invalid dataset type: {dataset_type}")
 
     tokenizer = AutoTokenizer.from_pretrained(config["vocab_name"])
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
@@ -135,8 +175,16 @@ def main():
         print(f"\n🔁 Epoch {epoch + 1}")
 
         # Train loop
-        for i in tqdm(range(0, len(train_ds), config["batch_size"]), desc="Training batches"):
-            batch = train_ds.select(range(i, min(i + config["batch_size"], len(train_ds))))
+        if dataset_type == "pickle":
+            train_ids, train_mask = train_ds["input_ids"], train_ds["attention_mask"]
+            val_ids, val_mask = val_ds["input_ids"], val_ds["attention_mask"]
+        else:
+            train_ids = train_ds["input_ids"]
+            train_mask = train_ds["attention_mask"]
+            val_ids = val_ds["input_ids"]
+            val_mask = val_ds["attention_mask"]
+
+        for batch in tqdm(batch_data(train_ids, train_mask, config["batch_size"]), desc="Training batches"):
             batch_jax = {
                 "input_ids": jnp.array(batch["input_ids"], dtype=jnp.int32),
                 "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
@@ -174,7 +222,7 @@ def main():
                 next_idx += 1
 
         # Validation at epoch end
-        val_loss = eval_epoch(state, val_ds, config["batch_size"])
+        val_loss = eval_epoch(state, val_ds, config["batch_size"], args.dataset_type)
         val_losses.append(val_loss)
         val_steps.append(global_step)
 
