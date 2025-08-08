@@ -1,11 +1,12 @@
 .env
-**/__pychache__/
+**/__pychache__
 trial.py
 bb-env
 data/tokens
 jax-gpu-env
 data/hang_on_bruh
 models/__pychache__
-scripts/__pycache__/
-utils/__pycache__/
-experiments/__pycache__/
+scripts/__pycache__
+utils/__pycache__
+experiments/__pycache__
+configs/__pycache__
