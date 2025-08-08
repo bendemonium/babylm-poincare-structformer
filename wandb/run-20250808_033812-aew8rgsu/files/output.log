@@ -1,6 +1,0 @@
-Traceback (most recent call last):
-  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 264, in <module>
-    main()
-  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 149, in main
-    assert config["train_tokenized_repo"] and config["train_tokenized_file"], "Train pickle config missing"
-AssertionError: Train pickle config missing
