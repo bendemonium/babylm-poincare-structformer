@@ -81,3 +81,5 @@ if __name__ == "__main__":
     )
 
 # python scripts/preprocess.py --split train
+# python scripts/preprocess.py --split dev
+# python scripts/preprocess.py --split test
