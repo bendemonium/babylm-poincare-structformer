@@ -12,3 +12,5 @@ huggingface_hub[cli]
 safetensors
 torch
 torchvision
+wandb
+datasets

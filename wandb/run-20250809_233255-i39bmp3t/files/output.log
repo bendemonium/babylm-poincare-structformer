@@ -1,0 +1,15 @@
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/train_tokenized.pkl
+Request 59cc07aa-36a4-4ef7-9be0-72a3c746f96c: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/train_tokenized.pkl (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/dev_tokenized.pkl
+Request 48c358e2-5154-41bf-b770-f2f87874056f: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/dev_tokenized.pkl (authenticated: True)
+✅ Loaded training dataset with 1,165,314 examples
+✅ Loaded validation dataset with 1,156,066 examples
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0; transformers/4.55.0; session_id/863e01d92c234ba3bcf1e92f73b48b2c' https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Request 10393287-f647-4d05-8b1b-c18030b35247: HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' 'https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False'
+Request 75f212f2-11a8-4fdd-9c4c-8729009f845d: GET https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'X-Amzn-Trace-Id: 75f212f2-11a8-4fdd-9c4c-8729009f845d' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' 'https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False'
+Request 75f212f2-11a8-4fdd-9c4c-8729009f845d: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False (authenticated: True)
+
+🔁 Epoch 1
+Training batches: 163it [00:20, 17.62it/s]
