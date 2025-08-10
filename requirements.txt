@@ -226,8 +226,8 @@ PyQt5==5.15.11
 PyQt5_sip==12.13.0
 PyQt6==6.9.1
 pysat==3.2.2
-Pyside==1.2.4
 PySide==1.2.4
+Pyside==1.2.4
 PySide2==5.15.2.1
 PySide6==6.9.1
 pyspark==3.5.1
