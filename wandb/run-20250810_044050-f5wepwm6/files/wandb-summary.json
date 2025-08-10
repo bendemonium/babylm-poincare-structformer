@@ -1,0 +1,1 @@
+{"train_loss_total":0.3678789436817169,"val_loss_poincare":0.001078850642661564,"_wandb":{"runtime":303},"train_loss_poincare":0.0010462168138474226,"val_loss_ce":0.40026845708489417,"train_loss_ce":0.3677743077278137,"val_loss_total":0.400376340597868,"_step":1000429,"_timestamp":1.754801148684868e+09,"_runtime":303.833536232}

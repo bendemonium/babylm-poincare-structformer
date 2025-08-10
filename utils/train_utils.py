@@ -1,6 +1,7 @@
-# train_utils.py
+from functools import partial
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.training import train_state
 from flax.core import freeze, unfreeze
 import optax
@@ -60,21 +61,32 @@ def compute_ce_loss(model, params_embed, params_other, batch):
     return ce_loss
 
 
-def compute_poincare_loss(model, params_embed, batch, c):
-    """Mean Poincaré distance loss on sequential token embeddings."""
-    embeds = model.apply({"params": params_embed},
-                         batch["input_ids"],
-                         batch.get("attention_mask", None),
-                         method=model.embed_only)
-    # Example: distance between adjacent token embeddings
-    dists = poincare_distance(embeds[:, :-1, :], embeds[:, 1:, :], c=c)
-    return dists.mean()
-
+def compute_poincare_loss(model, params_embed, params_other, batch, c):
+    """
+    Compute Poincaré distance loss using complete parameter set.
+    """
+    # Combine both parameter sets for model.apply()
+    combined_params = {**params_embed, **params_other}
+    
+    # Get logits from full forward pass
+    logits = model.apply({"params": combined_params},
+                        batch["input_ids"], 
+                        batch["attention_mask"])
+    
+    # Extract embeddings from the model's embedding layer
+    # We'll compute distances on the logits (which represent learned representations)
+    emb_current = logits[:, :-1, :]  # [B, T-1, D]
+    emb_next = logits[:, 1:, :]      # [B, T-1, D] 
+    
+    from models.hyperbolic_layers import poincare_distance
+    distances = poincare_distance(emb_current, emb_next, c=c)
+    
+    return distances.mean()
 
 # -------------------------------------------------
 # Train step
 # -------------------------------------------------
-@jax.jit
+@partial(jax.jit, static_argnames=('model',))
 def train_step(state_embed, state_other, batch, c, lambda_poincare, model):
     """
     One training step:
@@ -82,6 +94,7 @@ def train_step(state_embed, state_other, batch, c, lambda_poincare, model):
     - Poincaré loss: updates embedding params
     - Embeddings projected back into ball
     """
+    
     # Cross-entropy grads for non-embedding params
     def ce_loss_fn(params_other):
         return compute_ce_loss(model, state_embed.params, params_other, batch)
@@ -91,7 +104,7 @@ def train_step(state_embed, state_other, batch, c, lambda_poincare, model):
 
     # Poincaré grads for embedding params
     def poincare_loss_fn(params_embed):
-        return compute_poincare_loss(model, params_embed, batch, c)
+        return compute_poincare_loss(model, params_embed, state_other.params, batch, c)
 
     grads_embed = jax.grad(poincare_loss_fn)(state_embed.params)
     state_embed = state_embed.apply_gradients(grads=grads_embed)
@@ -104,7 +117,7 @@ def train_step(state_embed, state_other, batch, c, lambda_poincare, model):
 
     # Metrics for logging (no gradient effect)
     ce_val = compute_ce_loss(model, state_embed.params, state_other.params, batch)
-    poin_val = compute_poincare_loss(model, state_embed.params, batch, c)
+    poin_val = compute_poincare_loss(model, state_embed.params, state_other.params, batch, c)
     total_loss = ce_val + lambda_poincare * poin_val
 
     metrics = {
@@ -118,11 +131,11 @@ def train_step(state_embed, state_other, batch, c, lambda_poincare, model):
 # -------------------------------------------------
 # Eval step (no update)
 # -------------------------------------------------
-@jax.jit
+@partial(jax.jit, static_argnames=('model',))
 def eval_step(state_embed, state_other, batch, c, lambda_poincare, model):
     """Validation step: loss computation only."""
     ce_val = compute_ce_loss(model, state_embed.params, state_other.params, batch)
-    poin_val = compute_poincare_loss(model, state_embed.params, batch, c)
+    poin_val = compute_poincare_loss(model, state_embed.params, state_other.params, batch, c)
     total_loss = ce_val + lambda_poincare * poin_val
     return {
         "loss_total": total_loss,

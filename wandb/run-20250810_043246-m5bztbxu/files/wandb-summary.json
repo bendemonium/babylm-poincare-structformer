@@ -1,0 +1,1 @@
+{"_timestamp":1.754800662463751e+09,"val_loss_ce":0.3864267349243164,"train_loss_total":0.39265334606170654,"val_loss_poincare":0.0010550526896258817,"_step":1000979,"_runtime":296.128078412,"val_loss_total":0.3865322385728359,"train_loss_ce":0.39254263043403625,"_wandb":{"runtime":296},"train_loss_poincare":0.0011070281034335494}

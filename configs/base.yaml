@@ -1,13 +1,13 @@
 # base.yaml - Configuration for StructformerPoincare Training
 
 # Dataset and tokenizer settings
-
-dataset_type: "pickle"  # Using pickle files from HF repos
-train_tokenized_repo: bendemonium/babylm25_bpe_tokens
-train_tokenized_file: train_tokenized.pkl
-val_tokenized_repo: bendemonium/babylm25_bpe_tokens
-val_tokenized_file: dev_tokenized.pkl
-vocab_name: gpt2  # Tokenizer for vocab_size extraction
+data:
+  dataset_type: "pickle"  # Using pickle files from HF repos
+  train_tokenized_repo: bendemonium/babylm25_bpe_tokens
+  train_tokenized_file: train_tokenized.pkl
+  val_tokenized_repo: bendemonium/babylm25_bpe_tokens
+  val_tokenized_file: dev_tokenized.pkl
+  vocab_name: gpt2  # Tokenizer for vocab_size extraction
 
 # Model architecture hyperparameters
 model:
@@ -18,7 +18,7 @@ model:
   max_length: 128  # renamed from seq_length for consistency
   c: 1.0  # Hyperbolic geometry curvature parameter
 
-# Training hyperparameters
+# Training hyperparameters - WORD-BASED (not epoch-based)
 training:
   # Dual learning rates for dual-optimizer setup
   lr_ce: 0.0001      # Learning rate for cross-entropy loss (non-embedding params)
@@ -27,14 +27,15 @@ training:
   
   batch_size: 128
   eval_batch_size: 64  # Separate eval batch size
-  num_epochs: 5
   
-  # Batch limits per epoch (useful for development/testing)
-  train_max_batches: null  # null = use full dataset
-  eval_max_batches: 100    # limit eval batches for faster validation
+  # Word-based training limits (BabyLM style) - FIXED
+  max_words: 100000000  # 100M words total - THIS WAS MISSING
+  eval_interval_words: 1000000  # Run validation every 1M words
   
-  save_interval: 1  # Save checkpoint every N epochs
-  eval_interval: 1  # Run validation every N epochs
+  # Remove epoch-based settings since we're doing word-based training
+  # num_epochs: 5  # REMOVED
+  # save_interval: 1  # REMOVED  
+  # eval_interval: 1  # REMOVED
 
 # Logging and experiment tracking
 logging:
@@ -42,14 +43,18 @@ logging:
   use_wandb: true
   wandb_project: structformer-flax
   wandb_run_name: run-001
+  log_interval_words: 100000  # Log metrics every 100K words
 
-# Checkpoint & Export Configuration
+# Checkpoint & Export Configuration - Word milestone based
 checkpointing:
+  use_word_milestones: true  # Enable word-based checkpointing
+  max_words: 100000000  # 100M words
   output_repo_id: "bendemonium/babylm-poincare-structformer" 
-  branch_prefix: "checkpoint"
+  branch_prefix: "checkpoint"  # Will become "checkpoint_1M_words", etc.
   include_modeling_files:
+    - "models/structformer_poincare.py"  # FIXED: was missing .py
     - "models/hyperbolic_layers.py"
-  model_file: "models/structformer_poincare.py"
+  model_file: "models/structformer_poincare"
 
 # System Configuration
 system:

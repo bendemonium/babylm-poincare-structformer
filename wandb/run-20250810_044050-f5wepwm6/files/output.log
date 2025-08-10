@@ -1,0 +1,23 @@
+📡 Weights & Biases logging to project: structformer-flax
+🎯 Training milestones: ['1M', '2M', '3M', '4M', '5M']...
+
+🚀 Starting word-based training...
+Training Progress: 1000429words [05:03, 3294.24words/s, CE Loss=0.3678, Poincare Loss=0.0010, Total Loss=0.3679]                                      
+[step 100103] train_loss_ce: 2.5000 | train_loss_poincare: 0.0034 | train_loss_total: 2.5004 | elapsed: 46.3s
+[step 200720] train_loss_ce: 1.2732 | train_loss_poincare: 0.0024 | train_loss_total: 1.2734 | elapsed: 73.9s
+[step 300512] train_loss_ce: 1.1847 | train_loss_poincare: 0.0022 | train_loss_total: 1.1849 | elapsed: 101.4s
+[step 400796] train_loss_ce: 0.8839 | train_loss_poincare: 0.0019 | train_loss_total: 0.8841 | elapsed: 128.8s
+[step 500832] train_loss_ce: 0.6351 | train_loss_poincare: 0.0014 | train_loss_total: 0.6352 | elapsed: 156.3s
+[step 600261] train_loss_ce: 0.6039 | train_loss_poincare: 0.0015 | train_loss_total: 0.6040 | elapsed: 183.8s
+[step 700069] train_loss_ce: 0.5077 | train_loss_poincare: 0.0013 | train_loss_total: 0.5078 | elapsed: 211.0s
+[step 800028] train_loss_ce: 0.4737 | train_loss_poincare: 0.0014 | train_loss_total: 0.4738 | elapsed: 238.1s
+[step 901237] train_loss_ce: 0.3309 | train_loss_poincare: 0.0010 | train_loss_total: 0.3311 | elapsed: 266.1s
+[step 1000429] train_loss_ce: 0.3678 | train_loss_poincare: 0.0010 | train_loss_total: 0.3679 | elapsed: 292.3s
+
+🔍 Running validation at 1M words...
+[step 1000429] val_loss_total: 0.4004 | val_loss_ce: 0.4003 | val_loss_poincare: 0.0011 | elapsed: 298.5s
+📊 Validation: CE Loss: 0.4003, Poincaré Loss: 0.0011
+
+💾 Saving checkpoint at 1M words...
+✅ Wrote config.json to /tmp/tmp5w42taxg/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint_1M_words

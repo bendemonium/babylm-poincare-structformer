@@ -1,0 +1,1 @@
+{"train_loss_poincare":NaN,"_step":3400960,"train_loss_ce":NaN,"_wandb":{"runtime":1004},"val_loss_poincare":0.0004887127046822571,"_runtime":1004.145090098,"val_loss_total":0.14600458182394505,"val_loss_ce":0.14595571041107178,"train_loss_total":NaN,"_timestamp":1.7548021849909256e+09}

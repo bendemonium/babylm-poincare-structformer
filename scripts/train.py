@@ -61,7 +61,7 @@ def main():
     # Environment variables
     HF_REPO_ID = os.environ.get("HF_REPO_ID", config.checkpointing.output_repo_id)
     
-    print(f"🎯 Training with word-based milestones up to {config.training.max_words//1_000_000}M words")
+    print(f"🎯 Training with word-based milestones up to {config.training['max_words']//1_000_000}M words")
 
     # Load datasets
     print("📥 Loading datasets...")
@@ -207,14 +207,26 @@ def main():
                 # Merge parameters for saving
                 merged_params = {**state_embed.params, **state_other.params}
                 
+                # Convert DictAsAttr to regular dict recursively
+                def dictasattr_to_dict(obj):
+                    if hasattr(obj, '__dict__'):
+                        result = {}
+                        for key, value in obj.__dict__.items():
+                            if hasattr(value, '__dict__') and not isinstance(value, (str, int, float, bool, list)):
+                                result[key] = dictasattr_to_dict(value)
+                            else:
+                                result[key] = value
+                        return result
+                    return obj
+
                 save_checkpoint_branch(
                     params={"params": merged_params},
-                    config=config.__dict__ if hasattr(config, '__dict__') else vars(config),
+                    config=dictasattr_to_dict(config),  # Convert to serializable dict
                     branch_name=branch_name,
                     repo_id=HF_REPO_ID,
                     include_modeling_files=config.checkpointing.include_modeling_files,
                     model_file=config.checkpointing.model_file
-                )
+)
                 next_milestone_idx += 1
 
             # Progress logging every 1000 steps

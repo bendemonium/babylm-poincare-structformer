@@ -1,0 +1,79 @@
+📡 Weights & Biases logging to project: structformer-flax
+🎯 Training milestones: ['1M', '2M', '3M', '4M', '5M']...
+
+🚀 Starting word-based training...
+Training Progress:   2%|▎                 | 2000333/100000000 [09:47<7:43:58, 3520.35words/s, CE Loss=0.1999, Poincare Loss=0.0007, Total Loss=0.2000]
+[step 100263] train_loss_ce: 1.9020 | train_loss_poincare: 0.0031 | train_loss_total: 1.9023 | elapsed: 44.8s
+[step 201455] train_loss_ce: 1.0353 | train_loss_poincare: 0.0022 | train_loss_total: 1.0355 | elapsed: 72.1s
+[step 300370] train_loss_ce: 0.8930 | train_loss_poincare: 0.0019 | train_loss_total: 0.8932 | elapsed: 99.8s
+[step 401095] train_loss_ce: 0.8028 | train_loss_poincare: 0.0017 | train_loss_total: 0.8030 | elapsed: 129.5s
+[step 500162] train_loss_ce: 0.7756 | train_loss_poincare: 0.0016 | train_loss_total: 0.7757 | elapsed: 158.7s
+[step 600452] train_loss_ce: 0.5530 | train_loss_poincare: 0.0013 | train_loss_total: 0.5531 | elapsed: 187.8s
+[step 701428] train_loss_ce: 0.4254 | train_loss_poincare: 0.0012 | train_loss_total: 0.4255 | elapsed: 215.9s
+[step 800276] train_loss_ce: 0.4873 | train_loss_poincare: 0.0012 | train_loss_total: 0.4875 | elapsed: 242.4s
+[step 901060] train_loss_ce: 0.3098 | train_loss_poincare: 0.0009 | train_loss_total: 0.3099 | elapsed: 270.2s
+[step 1001550] train_loss_ce: 0.3401 | train_loss_poincare: 0.0009 | train_loss_total: 0.3402 | elapsed: 297.6s
+
+🔍 Running validation at 1M words...
+[step 1001550] val_loss_total: 0.4088 | val_loss_ce: 0.4087 | val_loss_poincare: 0.0011 | elapsed: 303.6s
+📊 Validation: CE Loss: 0.4087, Poincaré Loss: 0.0011
+
+💾 Saving checkpoint at 1M words...
+✅ Wrote config.json to /tmp/tmp4k7wuzxr/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint_1M_words
+[step 1101597] train_loss_ce: 0.3688 | train_loss_poincare: 0.0011 | train_loss_total: 0.3689 | elapsed: 336.4s
+[step 1201470] train_loss_ce: 0.2890 | train_loss_poincare: 0.0009 | train_loss_total: 0.2891 | elapsed: 363.8s
+[step 1300935] train_loss_ce: 0.3405 | train_loss_poincare: 0.0009 | train_loss_total: 0.3406 | elapsed: 390.6s
+[step 1400704] train_loss_ce: 0.2861 | train_loss_poincare: 0.0008 | train_loss_total: 0.2861 | elapsed: 417.9s
+[step 1500049] train_loss_ce: 0.2035 | train_loss_poincare: 0.0008 | train_loss_total: 0.2036 | elapsed: 447.2s
+[step 1601429] train_loss_ce: 0.1978 | train_loss_poincare: 0.0006 | train_loss_total: 0.1978 | elapsed: 475.2s
+📊 Step 1000: 1M/100M words (1.7%)
+[step 1700661] train_loss_ce: 0.2352 | train_loss_poincare: 0.0007 | train_loss_total: 0.2353 | elapsed: 502.9s
+[step 1801466] train_loss_ce: 0.1846 | train_loss_poincare: 0.0006 | train_loss_total: 0.1847 | elapsed: 531.5s
+[step 1900310] train_loss_ce: 0.1532 | train_loss_poincare: 0.0005 | train_loss_total: 0.1533 | elapsed: 560.1s
+[step 2000333] train_loss_ce: 0.1999 | train_loss_poincare: 0.0007 | train_loss_total: 0.2000 | elapsed: 588.7s
+
+🔍 Running validation at 2M words...
+[step 2000333] val_loss_total: 0.2035 | val_loss_ce: 0.2035 | val_loss_poincare: 0.0006 | elapsed: 589.9s
+📊 Validation: CE Loss: 0.2035, Poincaré Loss: 0.0006
+
+💾 Saving checkpoint at 2M words...
+✅ Wrote config.json to /tmp/tmpamjfp_ll/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint_2M_words
+[step 2101573] train_loss_ce: 0.2449 | train_loss_poincare: 0.0007 | train_loss_total: 0.2450 | elapsed: 624.0s
+[step 2200486] train_loss_ce: 0.0976 | train_loss_poincare: 0.0004 | train_loss_total: 0.0977 | elapsed: 653.0s
+[step 2300132] train_loss_ce: 0.1351 | train_loss_poincare: 0.0005 | train_loss_total: 0.1352 | elapsed: 680.9s
+[step 2400971] train_loss_ce: 0.1821 | train_loss_poincare: 0.0005 | train_loss_total: 0.1822 | elapsed: 710.8s
+[step 2501512] train_loss_ce: 0.1357 | train_loss_poincare: 0.0005 | train_loss_total: 0.1358 | elapsed: 740.4s
+[step 2601252] train_loss_ce: 0.1631 | train_loss_poincare: 0.0005 | train_loss_total: 0.1631 | elapsed: 769.9s
+[step 2701647] train_loss_ce: 0.1896 | train_loss_poincare: 0.0005 | train_loss_total: 0.1897 | elapsed: 798.9s
+[step 2801856] train_loss_ce: 0.1909 | train_loss_poincare: 0.0006 | train_loss_total: 0.1910 | elapsed: 828.8s
+[step 2900516] train_loss_ce: 0.1192 | train_loss_poincare: 0.0005 | train_loss_total: 0.1192 | elapsed: 856.6s
+[step 3000156] train_loss_ce: 0.1171 | train_loss_poincare: 0.0004 | train_loss_total: 0.1172 | elapsed: 884.4s
+
+🔍 Running validation at 3M words...
+[step 3000156] val_loss_total: 0.1460 | val_loss_ce: 0.1460 | val_loss_poincare: 0.0005 | elapsed: 885.6s
+📊 Validation: CE Loss: 0.1460, Poincaré Loss: 0.0005
+
+💾 Saving checkpoint at 3M words...
+✅ Wrote config.json to /tmp/tmp8sga5k2s/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint_3M_words
+[step 3100887] train_loss_ce: nan | train_loss_poincare: nan | train_loss_total: nan | elapsed: 918.5s
+[step 3200117] train_loss_ce: nan | train_loss_poincare: nan | train_loss_total: nan | elapsed: 945.9s
+[step 3301372] train_loss_ce: nan | train_loss_poincare: nan | train_loss_total: nan | elapsed: 973.3s
+📊 Step 2000: 3M/100M words (3.3%)
+[step 3400960] train_loss_ce: nan | train_loss_poincare: nan | train_loss_total: nan | elapsed: 1000.8s
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 254, in <module>
+    main()
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 164, in main
+    batch_words = count_tokens_in_batch(batch)
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 27, in count_tokens_in_batch
+    return int(jnp.sum(batch["attention_mask"]))
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/jax/_src/array.py", line 314, in __int__
+    return self._value.__int__()
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/jax/_src/profiler.py", line 354, in wrapper
+    return func(*args, **kwargs)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/jax/_src/array.py", line 644, in _value
+    npy_value, did_copy = self._single_device_array_to_np_array_did_copy()
+KeyboardInterrupt

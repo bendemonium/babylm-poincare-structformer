@@ -23,7 +23,7 @@ def load_pickle_from_hf(repo_id: str, filename: str, cache_dir: str = None):
     from huggingface_hub import hf_hub_download
 
     # Download the pickle file from HF repo
-    file_path = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=cache_dir)
+    file_path = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=cache_dir, repo_type="dataset")
 
     # Load pickle from local file
     with open(file_path, "rb") as f:

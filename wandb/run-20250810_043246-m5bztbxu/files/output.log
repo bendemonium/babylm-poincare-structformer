@@ -1,0 +1,41 @@
+📡 Weights & Biases logging to project: structformer-flax
+🎯 Training milestones: ['1M', '2M', '3M', '4M', '5M']...
+
+🚀 Starting word-based training...
+Training Progress: 1000979words [04:55, 3386.98words/s, CE Loss=0.3925, Poincare Loss=0.0011, Total Loss=0.3927]     
+[step 100131] train_loss_ce: 2.1592 | train_loss_poincare: 0.0033 | train_loss_total: 2.1595 | elapsed: 44.7s
+[step 200002] train_loss_ce: 1.0838 | train_loss_poincare: 0.0018 | train_loss_total: 1.0840 | elapsed: 72.1s
+[step 300960] train_loss_ce: 0.9764 | train_loss_poincare: 0.0019 | train_loss_total: 0.9766 | elapsed: 99.9s
+[step 401154] train_loss_ce: 0.7283 | train_loss_poincare: 0.0015 | train_loss_total: 0.7285 | elapsed: 127.3s
+[step 500745] train_loss_ce: 0.8083 | train_loss_poincare: 0.0018 | train_loss_total: 0.8085 | elapsed: 154.7s
+[step 600649] train_loss_ce: 0.6530 | train_loss_poincare: 0.0015 | train_loss_total: 0.6531 | elapsed: 182.1s
+[step 701364] train_loss_ce: 0.5124 | train_loss_poincare: 0.0012 | train_loss_total: 0.5125 | elapsed: 209.6s
+[step 801628] train_loss_ce: 0.5077 | train_loss_poincare: 0.0013 | train_loss_total: 0.5078 | elapsed: 236.5s
+[step 901044] train_loss_ce: 0.5421 | train_loss_poincare: 0.0013 | train_loss_total: 0.5423 | elapsed: 263.0s
+[step 1000979] train_loss_ce: 0.3925 | train_loss_poincare: 0.0011 | train_loss_total: 0.3927 | elapsed: 290.1s
+
+🔍 Running validation at 1M words...
+[step 1000979] val_loss_total: 0.3865 | val_loss_ce: 0.3864 | val_loss_poincare: 0.0011 | elapsed: 296.1s
+📊 Validation: CE Loss: 0.3864, Poincaré Loss: 0.0011
+
+💾 Saving checkpoint at 1M words...
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 242, in <module>
+    main()
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 210, in main
+    save_checkpoint_branch(
+  File "/home/ubuntu/babylm-poincare-structformer/utils/save_utils.py", line 135, in save_checkpoint_branch
+    write_config(config, tmp, model_file=model_file)
+  File "/home/ubuntu/babylm-poincare-structformer/utils/save_utils.py", line 47, in write_config
+    json.dump(export_config, f, indent=2)
+  File "/usr/lib/python3.10/json/__init__.py", line 179, in dump
+    for chunk in iterable:
+  File "/usr/lib/python3.10/json/encoder.py", line 431, in _iterencode
+    yield from _iterencode_dict(o, _current_indent_level)
+  File "/usr/lib/python3.10/json/encoder.py", line 405, in _iterencode_dict
+    yield from chunks
+  File "/usr/lib/python3.10/json/encoder.py", line 438, in _iterencode
+    o = _default(o)
+  File "/usr/lib/python3.10/json/encoder.py", line 179, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+TypeError: Object of type DictAsAttr is not JSON serializable
