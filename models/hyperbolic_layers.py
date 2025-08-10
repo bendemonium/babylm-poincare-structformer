@@ -19,3 +19,10 @@ def poincare_distance(x, y, c=1.0):
     num = 2 * sqrt_c * norm_diff
     denom = (1 - c * norm_x ** 2) * (1 - c * norm_y ** 2)
     return jnp.arccosh(1 + num ** 2 / denom)
+
+def project_to_ball(x, c=1.0, eps=0.00001):
+    # Project x onto the Poincaré ball if they exceed the radius
+    norm = jnp.linalg.norm(x, axis=-1, keepdims=True)
+    max_norm = (1.0 - eps) / jnp.sqrt(c)
+    scale = jnp.minimum(1.0, max_norm / (norm + 1e-15))
+    return x * scale

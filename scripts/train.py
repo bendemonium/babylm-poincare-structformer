@@ -4,241 +4,238 @@ import yaml
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
-from flax.training import train_state
 from tqdm import tqdm
 from transformers import AutoTokenizer
-from datasets import load_dataset
-from flax import struct
-import argparse
 
 from models.structformer_poincare import StructformerPoincare
-from models.hyperbolic_layers import poincare_distance
+from utils.train_utils import (
+    create_train_states,
+    train_step,
+    eval_epoch
+)
+from utils.logging_utils import MetricLogger
 from utils.save_utils import (
-    batch_data,
     make_milestones,
     save_checkpoint_branch,
     export_model_to_huggingface,
 )
-from utils.logging_utils import (
-    init_wandb,
-    init_tensorboard,
-    log_metrics_wandb,
-    log_metrics_tensorboard,
-    plot_losses,
-)
+from utils.retrieve_utils import load_dataset_dynamic
 
 
-def create_train_state(rng, config_dict, vocab_size):
-    model = StructformerPoincare(
-        vocab_size=vocab_size,
-        hidden_dim=config_dict["hidden_dim"],
-        num_heads=config_dict["num_heads"],
-        num_layers=config_dict["num_layers"],
-        max_length=config_dict["seq_length"],
-        c=config_dict.get("c", 1.0),
-    )
-    dummy = jnp.ones((1, config_dict["seq_length"]), dtype=jnp.int32)
-    mask = jnp.ones_like(dummy, dtype=jnp.bool_)
-    params = model.init(rng, dummy, mask)["params"]
-    tx = optax.adam(config_dict["learning_rate"])
-    return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx), model
+def count_tokens_in_batch(batch):
+    """Count actual tokens in batch (excluding padding)."""
+    return int(jnp.sum(batch["attention_mask"]))
 
 
-@jax.jit
-def train_step(state, batch, c=1.0):
-    def loss_fn(params):
-        logits = state.apply_fn({"params": params}, batch["input_ids"], batch["attention_mask"])
-        ce_loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch["input_ids"]).mean()
-
-        # Poincaré loss: average pairwise distance between token embeddings and their neighbors
-        emb = logits[..., :-1, :]  # [B, T-1, D]
-        tgt = logits[..., 1:, :]   # [B, T-1, D]
-
-        dist = poincare_distance(emb, tgt, c=c)
-        poincare_loss = dist.mean()
-
-        total_loss = ce_loss + 0.01 * poincare_loss
-        return total_loss, (ce_loss, poincare_loss)
-
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, (ce_loss, poincare_loss)), grads = grad_fn(state.params)
-    state = state.apply_gradients(grads=grads)
-    return state, ce_loss, poincare_loss
-
-
-def eval_step(params, apply_fn, input_ids, attention_mask):
-    logits = apply_fn({'params': params}, input_ids, attention_mask)
-    return optax.softmax_cross_entropy_with_integer_labels(logits, input_ids).mean()
-
-eval_step = jax.jit(eval_step, static_argnames=("apply_fn",))
-
-
-def eval_epoch(state, val_data, batch_size, dataset_type="hf", max_batches=32):
-    losses = []
-
-    if dataset_type == "pickle":
-        input_ids = val_data["input_ids"]
-        attention_mask = val_data["attention_mask"]
-        total_samples = len(input_ids)
-        num_samples = min(total_samples, batch_size * max_batches)
-        indices = np.random.choice(total_samples, num_samples, replace=False)
-
-        for start in range(0, num_samples, batch_size):
-            idx = indices[start : start + batch_size]
-            x = jnp.array(input_ids[idx], dtype=jnp.int32)
-            m = jnp.array(attention_mask[idx], dtype=jnp.bool_)
-            loss = eval_step(state.params, state.apply_fn, x, m)
-            losses.append(float(loss))
-
-    else:
-        total_samples = len(val_data)
-        num_samples = min(total_samples, batch_size * max_batches)
-        indices = np.random.choice(total_samples, num_samples, replace=False)
-
-        for start in range(0, num_samples, batch_size):
-            idx = indices[start : start + batch_size]
-            batch = val_data.select(idx)
-            x = jnp.array(batch["input_ids"], dtype=jnp.int32)
-            m = jnp.array(batch["attention_mask"], dtype=jnp.bool_)
-            loss = eval_step(state.params, state.apply_fn, x, m)
-            losses.append(float(loss))
-
-    return np.mean(losses) if losses else float("inf")
-
-
-def load_pickle_from_hub(repo_id, filename):
-    from huggingface_hub import hf_hub_download
-    import pickle
-
-    path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
-    with open(path, "rb") as f:
-        return pickle.load(f)
+def load_config_from_yaml(config_path):
+    """Load YAML config and convert to dot-accessible object."""
+    with open(config_path, 'r') as f:
+        config_dict = yaml.safe_load(f)
+    
+    class DictAsAttr:
+        def __init__(self, d):
+            for k, v in d.items():
+                if isinstance(v, dict):
+                    setattr(self, k, DictAsAttr(v))
+                else:
+                    setattr(self, k, v)
+        
+        def __getitem__(self, key):
+            return getattr(self, key)
+        
+        def get(self, key, default=None):
+            return getattr(self, key, default)
+    
+    return DictAsAttr(config_dict)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=True)
-    parser.add_argument("--dataset-type", type=str, choices=["hf", "pickle"], default="hf")
-    parser.add_argument("--use_wandb", action="store_true")
-    parser.add_argument("--use_tensorboard", action="store_true")
+    parser.add_argument("--config", type=str, required=True, help="Path to YAML config file")
+    parser.add_argument("--dry-run", action="store_true", help="Run only a few batches for testing")
     args = parser.parse_args()
 
-    with open(args.config) as f:
-        config = yaml.safe_load(f)
+    # Load config
+    config = load_config_from_yaml(args.config)
+    
+    # Environment variables
+    HF_REPO_ID = os.environ.get("HF_REPO_ID", config.checkpointing.output_repo_id)
+    
+    print(f"🎯 Training with word-based milestones up to {config.training.max_words//1_000_000}M words")
 
-    HF_REPO_ID = os.environ["HF_REPO_ID"]
-    HF_TOKENIZED_DATASET_REPO = os.environ.get("HF_TOKENIZED_DATASET_REPO")
-
-    # Logging setup
-    wandb_run = init_wandb(config.get("wandb_project", "structformer"), config.get("wandb_run_name"), config) if args.use_wandb else None
-    tb_writer = init_tensorboard() if args.use_tensorboard else None
-
-    if args.dataset_type == "hf":
-        ds = load_dataset(HF_TOKENIZED_DATASET_REPO)
-        train_ds = ds["train"]
-        val_ds = ds.get("dev") or ds.get("validation") or ds["test"]
-    else:
-        assert config.get("train_tokenized_repo") and config.get("train_tokenized_file"), "Missing train pickle config"
-        assert config.get("val_tokenized_repo") and config.get("val_tokenized_file"), "Missing val pickle config"
-        train_ds = load_pickle_from_hub(config["train_tokenized_repo"], config["train_tokenized_file"])
-        val_ds = load_pickle_from_hub(config["val_tokenized_repo"], config["val_tokenized_file"])
-
-    # Print dataset sizes
-    if args.dataset_type == "pickle":
-        print(f"✅ Loaded training dataset with {len(train_ds['input_ids']):,} examples")
-        print(f"✅ Loaded validation dataset with {len(val_ds['input_ids']):,} examples")
-    else:
-        print(f"✅ Loaded training dataset with {len(train_ds):,} examples")
-        print(f"✅ Loaded validation dataset with {len(val_ds):,} examples")
-
-    tokenizer = AutoTokenizer.from_pretrained(config["vocab_name"])
-    pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
-    vocab_size = tokenizer.vocab_size
-
-    rng = jax.random.PRNGKey(config.get("seed", 0))
-    state, _ = create_train_state(rng, config, vocab_size)
-
-    milestones = make_milestones()
-    words_seen = 0
-    global_step = 0
-    next_idx = 0
-
-    train_losses, val_losses, poincare_losses, val_steps = [], [], [], []
-
-    for epoch in range(config["num_epochs"]):
-        print(f"\n🔁 Epoch {epoch + 1}")
-        if args.dataset_type == "pickle":
-            train_ids, train_mask = train_ds["input_ids"], train_ds["attention_mask"]
-        else:
-            train_ids = train_ds["input_ids"]
-            train_mask = train_ds["attention_mask"]
-
-        for batch in tqdm(batch_data(train_ids, train_mask, config["batch_size"]), desc="Training batches"):
-            batch_jax = {
-                "input_ids": jnp.array(batch["input_ids"], dtype=jnp.int32),
-                "attention_mask": jnp.array(batch["attention_mask"], dtype=jnp.bool_),
-            }
-            state, ce_loss, p_loss = train_step(state, batch_jax, c=config.get("c", 1.0))
-            ce_loss = float(ce_loss)
-            p_loss = float(p_loss)
-
-            train_losses.append(ce_loss)
-            poincare_losses.append(p_loss)
-            global_step += 1
-
-            if wandb_run:
-                log_metrics_wandb({"train/ce_loss": ce_loss, "train/poincare_loss": p_loss}, global_step)
-            if tb_writer:
-                log_metrics_tensorboard(tb_writer, {"train/ce_loss": ce_loss, "train/poincare_loss": p_loss}, global_step)
-
-            nonpad = (np.array(batch["input_ids"]) != pad_id).sum()
-            words_seen += int(nonpad * 0.75)
-
-            while next_idx < len(milestones) and words_seen >= milestones[next_idx]:
-                branch = f"checkpoint-{milestones[next_idx] // 1_000_000}M-words"
-                print(f"\n📤 Pushing checkpoint branch: {branch}")
-                save_checkpoint_branch(
-                    params=state.params,
-                    config=config,
-                    branch_name=branch,
-                    repo_id=HF_REPO_ID,
-                    include_modeling_files=["hyperbolic_layers.py", "structformer_config.py"],
-                )
-                next_idx += 1
-
-        val_loss = eval_epoch(state, val_ds, config["batch_size"], args.dataset_type)
-        val_losses.append(val_loss)
-        val_steps.append(global_step)
-
-        print(f"✅ Epoch {epoch + 1} complete | Train CE Loss: {ce_loss:.4f} | Val Loss: {val_loss:.4f} | Words Seen: {words_seen:,}")
-
-        if wandb_run:
-            log_metrics_wandb({"validation/loss": val_loss}, global_step)
-        if tb_writer:
-            log_metrics_tensorboard(tb_writer, {"validation/loss": val_loss}, global_step)
-
-    if os.getenv("HF_MODEL_EXPORT", "no").lower() == "yes":
-        export_model_to_huggingface(
-            params=state.params,
-            config=config,
-            repo_id=HF_REPO_ID,
-            commit_message=f"Final model after {words_seen:,} words",
-            include_modeling_files=["hyperbolic_layers.py", "structformer_config.py"],
-        )
-
-    plot_losses(
-        train_losses=train_losses,
-        val_losses=val_losses,
-        poincare_losses=poincare_losses,
-        val_steps=val_steps,
-        save_path="loss_graph.pdf",
+    # Load datasets
+    print("📥 Loading datasets...")
+    train_data = load_dataset_dynamic(
+        config.data.train_tokenized_repo,
+        method="pickle",
+        pickle_filename=config.data.train_tokenized_file
+    )
+    val_data = load_dataset_dynamic(
+        config.data.val_tokenized_repo,
+        method="pickle",
+        pickle_filename=config.data.val_tokenized_file
     )
 
-    if wandb_run:
-        wandb_run.finish()
-    if tb_writer:
-        tb_writer.close()
+    print(f"✅ Loaded training dataset with {len(train_data['input_ids']):,} examples")
+    print(f"✅ Loaded validation dataset with {len(val_data['input_ids']):,} examples")
+
+    # Tokenizer setup
+    tokenizer = AutoTokenizer.from_pretrained(config.data.vocab_name)
+    pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
+    vocab_size = tokenizer.vocab_size
+    
+    # Initialize model and dual states
+    rng = jax.random.PRNGKey(config.system.seed)
+    model = StructformerPoincare(
+        vocab_size=vocab_size,
+        hidden_dim=config.model.hidden_dim,
+        num_heads=config.model.num_heads,
+        num_layers=config.model.num_layers,
+        max_length=config.model.max_length,
+        c=config.model.c
+    )
+
+    state_embed, state_other = create_train_states(
+        rng, model,
+        vocab_size=vocab_size,
+        seq_len=config.model.max_length,
+        lr_ce=config.training.lr_ce,
+        lr_riem=config.training.lr_riem
+    )
+
+    # Logging setup
+    logger = MetricLogger(
+        log_dir=config.logging.log_dir,
+        use_wandb=config.logging.use_wandb,
+        wandb_project=config.logging.wandb_project,
+        wandb_runname=config.logging.wandb_run_name
+    )
+
+    # Word-based training setup
+    total_words_processed = 0
+    milestones = make_milestones(max_words=config.training.max_words)
+    next_milestone_idx = 0
+    next_eval_words = config.training.eval_interval_words
+    next_log_words = config.logging.log_interval_words
+    global_step = 0
+    
+    print(f"🎯 Training milestones: {[f'{m//1_000_000}M' for m in milestones[:5]]}...")
+    
+    # Training data setup
+    total_samples = len(train_data["input_ids"])
+    indices = np.random.permutation(total_samples)
+    batch_idx = 0
+
+    # Dry run limit
+    max_words_for_run = 1_000_000 if args.dry_run else config.training.max_words
+    
+    # Main training loop - word-based
+    print(f"\n🚀 Starting word-based training...")
+    with tqdm(total=max_words_for_run, unit="words", desc="Training Progress") as pbar:
+        while total_words_processed < max_words_for_run:
+            # Create batch indices
+            start_idx = (batch_idx * config.training.batch_size) % total_samples
+            end_idx = min(start_idx + config.training.batch_size, total_samples)
+            
+            # Handle wrap-around and reshuffle
+            if end_idx - start_idx < config.training.batch_size:
+                indices = np.random.permutation(total_samples)
+                start_idx = 0
+                end_idx = config.training.batch_size
+                print("🔄 Reshuffled training data")
+
+            idx = indices[start_idx:end_idx]
+            
+            # Create batch
+            batch = {
+                "input_ids": jnp.array(np.array(train_data["input_ids"])[idx], dtype=jnp.int32),
+                "attention_mask": jnp.array(np.array(train_data["attention_mask"])[idx], dtype=jnp.bool_)
+            }
+
+            # Training step with dual states
+            state_embed, state_other, train_metrics = train_step(
+                state_embed, state_other, batch,
+                c=config.model.c,
+                lambda_poincare=config.training.lambda_poincare,
+                model=model
+            )
+
+            # Count words processed in this batch
+            batch_words = count_tokens_in_batch(batch)
+            total_words_processed += batch_words
+            global_step += 1
+            batch_idx += 1
+            
+            # Update progress bar
+            pbar.update(batch_words)
+            pbar.set_postfix({
+                'CE Loss': f"{float(train_metrics['loss_ce']):.4f}",
+                'Poincare Loss': f"{float(train_metrics['loss_poincare']):.4f}",
+                'Total Loss': f"{float(train_metrics['loss_total']):.4f}"
+            })
+
+            # Logging at intervals
+            if total_words_processed >= next_log_words:
+                logger.log_metrics(train_metrics, step=total_words_processed, prefix="train")
+                next_log_words += config.logging.log_interval_words
+
+            # Validation at intervals
+            if total_words_processed >= next_eval_words:
+                print(f"\n🔍 Running validation at {total_words_processed//1_000_000}M words...")
+                eval_metrics = eval_epoch(
+                    state_embed, state_other, val_data,
+                    config.training.eval_batch_size,
+                    config.model.c,
+                    config.training.lambda_poincare,
+                    model,
+                    dataset_type="pickle",
+                    max_batches=100
+                )
+                logger.log_metrics(eval_metrics, step=total_words_processed, prefix="val")
+                print(f"📊 Validation: CE Loss: {eval_metrics['loss_ce']:.4f}, Poincaré Loss: {eval_metrics['loss_poincare']:.4f}")
+                next_eval_words += config.training.eval_interval_words
+
+            # Checkpoint at milestones
+            if (next_milestone_idx < len(milestones) and 
+                total_words_processed >= milestones[next_milestone_idx]):
+                
+                milestone_words = milestones[next_milestone_idx]
+                branch_name = f"{config.checkpointing.branch_prefix}_{milestone_words//1_000_000}M_words"
+                
+                print(f"\n💾 Saving checkpoint at {milestone_words//1_000_000}M words...")
+                
+                # Merge parameters for saving
+                merged_params = {**state_embed.params, **state_other.params}
+                
+                save_checkpoint_branch(
+                    params={"params": merged_params},
+                    config=config.__dict__ if hasattr(config, '__dict__') else vars(config),
+                    branch_name=branch_name,
+                    repo_id=HF_REPO_ID,
+                    include_modeling_files=config.checkpointing.include_modeling_files,
+                    model_file=config.checkpointing.model_file
+                )
+                next_milestone_idx += 1
+
+            # Progress logging every 1000 steps
+            if global_step % 1000 == 0:
+                progress_pct = (total_words_processed / max_words_for_run) * 100
+                print(f"📊 Step {global_step}: {total_words_processed//1_000_000}M/{max_words_for_run//1_000_000}M words ({progress_pct:.1f}%)")
+
+    # Final export if requested
+    if os.getenv("HF_MODEL_EXPORT", "no").lower() == "yes" and not args.dry_run:
+        print("\n📤 Exporting final model to Hugging Face Hub...")
+        merged_params = {**state_embed.params, **state_other.params}
+        export_model_to_huggingface(
+            params={"params": merged_params},
+            config=config.__dict__ if hasattr(config, '__dict__') else vars(config),
+            repo_id=HF_REPO_ID,
+            commit_message=f"Final model after {total_words_processed:,} words",
+            include_modeling_files=config.checkpointing.include_modeling_files
+        )
+
+    logger.close()
+    print(f"✅ Training completed! Processed {total_words_processed//1_000_000}M words")
 
 
 if __name__ == "__main__":
