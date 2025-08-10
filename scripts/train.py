@@ -67,10 +67,11 @@ def train_step(state, batch, c=1.0):
     return state, ce_loss, poincare_loss
 
 
-@jax.jit
 def eval_step(params, apply_fn, input_ids, attention_mask):
-    logits = apply_fn({"params": params}, input_ids, attention_mask)
+    logits = apply_fn({'params': params}, input_ids, attention_mask)
     return optax.softmax_cross_entropy_with_integer_labels(logits, input_ids).mean()
+
+eval_step = jax.jit(eval_step, static_argnames=("apply_fn",))
 
 
 def eval_epoch(state, val_data, batch_size, dataset_type="hf", max_batches=32):

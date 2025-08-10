@@ -5,9 +5,9 @@ class StructformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_dim: int = 512,
+        hidden_dim: int = 256,
         num_heads: int = 8,
-        num_layers: int = 6,
+        num_layers: int = 4,
         max_length: int = 128,
         vocab_size: int = 50257,
         c: float = 1.0,

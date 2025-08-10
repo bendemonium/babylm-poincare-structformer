@@ -1,0 +1,43 @@
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/train_tokenized.pkl
+Request b99aa84f-94fc-46d6-8d5e-52b789ef8e67: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/train_tokenized.pkl (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/dev_tokenized.pkl
+Request 61e2633a-c5e4-4771-ab06-f8a2fa324446: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/dev_tokenized.pkl (authenticated: True)
+✅ Loaded training dataset with 1,165,314 examples
+✅ Loaded validation dataset with 1,156,066 examples
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0; transformers/4.55.0; session_id/29884738a9af48998b00c6f1a3f23af5' https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Request 9ff04eca-4320-4b14-b2de-4670f24030b3: HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' 'https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False'
+Request ecab85ba-60e7-49cc-a956-f1a84882d268: GET https://huggingface.co/api/models/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'X-Amzn-Trace-Id: ecab85ba-60e7-49cc-a956-f1a84882d268' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' 'https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False'
+Request ecab85ba-60e7-49cc-a956-f1a84882d268: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False (authenticated: True)
+
+🔁 Epoch 1
+Training batches: 5425it [05:40, 17.80it/s]
+
+📤 Pushing checkpoint branch: checkpoint-1M-words
+✅ Wrote config.json to /tmp/tmp9k1r235y/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-1M-words
+
+📤 Pushing checkpoint branch: checkpoint-2M-words
+✅ Wrote config.json to /tmp/tmpht99ch__/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-2M-words
+
+📤 Pushing checkpoint branch: checkpoint-3M-words
+✅ Wrote config.json to /tmp/tmpkcfx04h_/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-3M-words
+
+📤 Pushing checkpoint branch: checkpoint-4M-words
+✅ Wrote config.json to /tmp/tmpgc9zd4zu/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-4M-words
+
+📤 Pushing checkpoint branch: checkpoint-5M-words
+✅ Wrote config.json to /tmp/tmpmykr83x9/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-5M-words
+
+📤 Pushing checkpoint branch: checkpoint-6M-words
+✅ Wrote config.json to /tmp/tmpi4_cyrqy/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-6M-words
+
+📤 Pushing checkpoint branch: checkpoint-7M-words
+✅ Wrote config.json to /tmp/tmpq4m04lyl/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-7M-words

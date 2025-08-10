@@ -1,0 +1,100 @@
+_wandb:
+    value:
+        cli_version: 0.21.1
+        e:
+            aaax2xcha6g04et5e4wpar170ua5hsjd:
+                args:
+                    - --config
+                    - configs/base.yaml
+                    - --dataset-type
+                    - pickle
+                    - --use_wandb
+                codePath: scripts/train.py
+                codePathLocal: scripts/train.py
+                cpu_count: 30
+                cpu_count_logical: 30
+                cudaVersion: "12.8"
+                disk:
+                    /:
+                        total: "532608356352"
+                        used: "53686575104"
+                email: ridhib2422@gmail.com
+                executable: /home/ubuntu/babylm-poincare-structformer/bb-env/bin/python
+                git:
+                    commit: d9a4d583b97f5eda8c0b09d2e0cae38f4396dad4
+                    remote: https://github.com/bendemonium/babylm-poincare-structformer.git
+                gpu: NVIDIA A100-SXM4-40GB
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 6912
+                      memoryTotal: "42949672960"
+                      name: NVIDIA A100-SXM4-40GB
+                      uuid: GPU-bf508943-3ddd-99a8-fdcb-ccce69f44242
+                host: 132-145-138-10
+                memory:
+                    total: "232205725696"
+                os: Linux-6.8.0-60-generic-x86_64-with-glibc2.35
+                program: /home/ubuntu/babylm-poincare-structformer/scripts/train.py
+                python: CPython 3.10.12
+                root: /home/ubuntu/babylm-poincare-structformer
+                startedAt: "2025-08-09T23:20:37.225501Z"
+                writerId: aaax2xcha6g04et5e4wpar170ua5hsjd
+        m: []
+        python_version: 3.10.12
+        t:
+            "1":
+                - 1
+                - 11
+                - 12
+                - 45
+                - 49
+                - 51
+            "2":
+                - 1
+                - 11
+                - 12
+                - 45
+                - 49
+                - 51
+            "3":
+                - 13
+                - 16
+                - 61
+            "4": 3.10.12
+            "5": 0.21.1
+            "6": 4.55.0
+            "12": 0.21.1
+            "13": linux-x86_64
+batch_size:
+    value: 128
+c:
+    value: 1
+hidden_dim:
+    value: 256
+learning_rate:
+    value: 0.0001
+num_epochs:
+    value: 5
+num_heads:
+    value: 8
+num_layers:
+    value: 4
+seed:
+    value: 42
+seq_length:
+    value: 128
+train_tokenized_file:
+    value: train_tokenized.pkl
+train_tokenized_repo:
+    value: bendemonium/babylm25_bpe_tokens
+val_tokenized_file:
+    value: dev_tokenized.pkl
+val_tokenized_repo:
+    value: bendemonium/babylm25_bpe_tokens
+vocab_name:
+    value: gpt2
+wandb_project:
+    value: structformer-flax
+wandb_run_name:
+    value: run-001
