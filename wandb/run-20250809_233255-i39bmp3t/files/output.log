@@ -12,4 +12,57 @@ Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Conne
 Request 75f212f2-11a8-4fdd-9c4c-8729009f845d: GET https://huggingface.co/api/models/openai-community/gpt2/tree/main/additional_chat_templates?recursive=False&expand=False (authenticated: True)
 
 🔁 Epoch 1
-Training batches: 163it [00:20, 17.62it/s]
+Training batches: 5923it [06:13, 17.65it/s]
+
+📤 Pushing checkpoint branch: checkpoint-1M-words
+✅ Wrote config.json to /tmp/tmpiovltyjn/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-1M-words
+
+📤 Pushing checkpoint branch: checkpoint-2M-words
+✅ Wrote config.json to /tmp/tmpvk57o1k6/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-2M-words
+
+📤 Pushing checkpoint branch: checkpoint-3M-words
+✅ Wrote config.json to /tmp/tmpdrkuf_i_/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-3M-words
+
+📤 Pushing checkpoint branch: checkpoint-4M-words
+✅ Wrote config.json to /tmp/tmpoqbkk09r/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-4M-words
+
+📤 Pushing checkpoint branch: checkpoint-5M-words
+✅ Wrote config.json to /tmp/tmpmsvmq6mo/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-5M-words
+
+📤 Pushing checkpoint branch: checkpoint-6M-words
+✅ Wrote config.json to /tmp/tmpe6hoxj7k/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-6M-words
+
+📤 Pushing checkpoint branch: checkpoint-7M-words
+✅ Wrote config.json to /tmp/tmpof9vzojb/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-7M-words
+
+📤 Pushing checkpoint branch: checkpoint-8M-words
+✅ Wrote config.json to /tmp/tmpze0phuvd/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-8M-words
+
+📤 Pushing checkpoint branch: checkpoint-9M-words
+✅ Wrote config.json to /tmp/tmpcfvjb9pn/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-9M-words
+
+📤 Pushing checkpoint branch: checkpoint-10M-words
+✅ Wrote config.json to /tmp/tmp1k5cr5z0/config.json
+✅ Checkpoint pushed to branch: https://huggingface.co/bendemonium/babylm-poincare-structformer/tree/checkpoint-10M-words
+jax.errors.SimplifiedTraceback: For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 246, in <module>
+    main()
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 211, in main
+    val_loss = eval_epoch(state, val_ds, config["batch_size"], args.dataset_type)
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 92, in eval_epoch
+    loss = eval_step(state.params, state.apply_fn, x, m)
+TypeError: Error interpreting argument to <function eval_step at 0x74252465d630> as an abstract array. The problematic value is of type <class 'method'> and was passed to the function at path apply_fn.
+This typically means that a jit-wrapped function was called with a non-array argument, and this argument was not marked as static using the static_argnums or static_argnames parameters of jax.jit.
