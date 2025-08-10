@@ -53,4 +53,9 @@ git add .gitattributes
 export $(grep -v '^#' .env | xargs)
 
 
-python scripts/train.py --config configs/base.yaml --dataset-type pickle --use_wandb --use_tensorboard
+TRAINNNNN
+
+python utils/test_utils.py  # Catches issues before long training
+python train.py --config base.yaml --dry-run  # Test with 1M words
+python train.py --config base.yaml
+
