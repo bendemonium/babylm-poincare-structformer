@@ -46,6 +46,51 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Helpers
 # =============================================================================
+import numpy as np
+from flax.traverse_util import flatten_dict
+
+_NUMERIC_KINDS = set("iuafb")   # int, unsigned, float, complex, bool (complex is allowed by safetensors)
+
+def _params_to_safetensors_dict(params: Dict[str, Any]) -> Dict[str, np.ndarray]:
+    """
+    Flatten a Flax params pytree into a dict[str, np.ndarray] suitable for safetensors.
+    - Keys are joined by '/' (e.g., "Transformer/Block_0/LayerNorm/scale")
+    - JAX arrays -> NumPy
+    - Reject/convert non-numeric/object dtypes
+    """
+    flat = flatten_dict(params, sep="/")  # {'a/b': leaf, ...}
+    out: Dict[str, np.ndarray] = {}
+    for k, v in flat.items():
+        # Accept jax.Array, np.ndarray, or anything __array__-able
+        if isinstance(v, jax.Array):
+            arr = np.asarray(v)
+        elif isinstance(v, np.ndarray):
+            arr = v
+        else:
+            try:
+                arr = np.asarray(v)
+            except Exception:
+                # Skip completely non-array leaves
+                continue
+
+        # Guard dtype
+        if arr.dtype == object or arr.dtype.kind not in _NUMERIC_KINDS:
+            # Common gotchas: Python objects slipped in, or unsupported types. Cast floats to fp32 as a safe default.
+            if np.issubdtype(arr.dtype, np.floating) or arr.dtype.kind == 'V':  # structured -> likely bad
+                arr = arr.astype(np.float32)
+            elif arr.dtype.kind in ('i', 'u', 'b'):
+                # ints/uints/bools are fine
+                arr = arr
+            else:
+                # Skip anything still suspicious (strings, objects, etc.)
+                continue
+
+        # Some projects prefer to avoid bfloat16 on save; cast if you’ve seen issues:
+        # if arr.dtype == np.dtype('bfloat16'):
+        #     arr = arr.astype(np.float32)
+
+        out[str(k)] = arr
+    return out
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -257,7 +302,10 @@ def save_checkpoint_branch(
         # 2) Flax weights — primary: safetensors; also include msgpack + legacy file name.
         #    a) flax_model.safetensors
         safetensors_path = os.path.join(tmp_dir, "flax_model.safetensors")
-        save_safetensors(params, safetensors_path)
+        tensor_map = _params_to_safetensors_dict(params)
+        if not tensor_map:
+            raise ValueError("No numeric tensors found in params to save as safetensors.")
+        save_safetensors(tensor_map, safetensors_path)
 
         #    b) flax_model.msgpack (Transformers still supports this format broadly)
         flax_msgpack_path = os.path.join(tmp_dir, "flax_model.msgpack")

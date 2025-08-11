@@ -1,0 +1,14 @@
+{"time":"2025-08-11T19:12:38.377779392Z","level":"INFO","msg":"stream: starting","core version":"0.21.1"}
+{"time":"2025-08-11T19:12:38.546002971Z","level":"INFO","msg":"stream: created new stream","id":"ultdiwxo"}
+{"time":"2025-08-11T19:12:38.546030748Z","level":"INFO","msg":"stream: started","id":"ultdiwxo"}
+{"time":"2025-08-11T19:12:38.5460383Z","level":"INFO","msg":"handler: started","stream_id":"ultdiwxo"}
+{"time":"2025-08-11T19:12:38.546050396Z","level":"INFO","msg":"sender: started","stream_id":"ultdiwxo"}
+{"time":"2025-08-11T19:12:38.546060668Z","level":"INFO","msg":"writer: started","stream_id":"ultdiwxo"}
+{"time":"2025-08-11T19:12:38.70277314Z","level":"ERROR","msg":"git repo not found","error":"repository does not exist"}
+{"time":"2025-08-11T19:14:08.946212182Z","level":"INFO","msg":"api: retrying HTTP error","status":502,"url":"https://api.wandb.ai/files/ridb24-independent/structformer-flax/ultdiwxo/file_stream","body":"\n<html><head>\n<meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n<title>502 Server Error</title>\n</head>\n<body text=#000000 bgcolor=#ffffff>\n<h1>Error: Server Error</h1>\n<h2>The server encountered a temporary error and could not complete your request.<p>Please try again in 30 seconds.</h2>\n<h2></h2>\n</body></html>\n"}
+{"time":"2025-08-11T19:14:47.654388619Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-08-11T19:14:47.750303961Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-08-11T19:14:47.752828529Z","level":"INFO","msg":"stream: closing","id":"ultdiwxo"}
+{"time":"2025-08-11T19:14:47.752841841Z","level":"INFO","msg":"handler: closed","stream_id":"ultdiwxo"}
+{"time":"2025-08-11T19:14:47.752885042Z","level":"INFO","msg":"sender: closed","stream_id":"ultdiwxo"}
+{"time":"2025-08-11T19:14:47.752890386Z","level":"INFO","msg":"stream: closed","id":"ultdiwxo"}

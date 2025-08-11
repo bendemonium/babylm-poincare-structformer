@@ -1,0 +1,28 @@
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_setup.py:_flush():80] Current SDK version is 0.21.1
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_setup.py:_flush():80] Configure stats pid to 6106
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_setup.py:_flush():80] Loading settings from /home/ubuntu/.config/wandb/settings
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_setup.py:_flush():80] Loading settings from /home/ubuntu/babylm-poincare-structformer/wandb/settings
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_setup.py:_flush():80] Loading settings from environment variables
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_init.py:setup_run_log_directory():703] Logging user logs to logs/structformer_run/wandb/run-20250811_191238-ultdiwxo/logs/debug.log
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_init.py:setup_run_log_directory():704] Logging internal logs to logs/structformer_run/wandb/run-20250811_191238-ultdiwxo/logs/debug-internal.log
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_init.py:init():830] calling init triggers
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_init.py:init():835] wandb.init called with sweep_config: {}
+config: {'model_type': 'structformer_poincare', 'framework': 'jax_flax', 'vocab_size': 50257, 'hidden_dim': 256, 'num_layers': 8, 'num_heads': 8, 'max_length': 128, 'hyperbolic_c': 1.0, 'lr_ce': 0.0002, 'lr_riem': 0.0001, 'lambda_poincare': None, 'batch_size': 128, 'max_words': 100000000, '_wandb': {'code_path': 'code/scripts/train.py'}}
+2025-08-11 19:12:38,170 INFO    MainThread:6106 [wandb_init.py:init():871] starting backend
+2025-08-11 19:12:38,374 INFO    MainThread:6106 [wandb_init.py:init():874] sending inform_init request
+2025-08-11 19:12:38,376 INFO    MainThread:6106 [wandb_init.py:init():882] backend started and connected
+2025-08-11 19:12:38,378 INFO    MainThread:6106 [wandb_init.py:init():953] updated telemetry
+2025-08-11 19:12:38,381 INFO    MainThread:6106 [wandb_init.py:init():977] communicating run to backend with 90.0 second timeout
+2025-08-11 19:12:38,701 INFO    MainThread:6106 [wandb_init.py:init():1029] starting run threads in backend
+2025-08-11 19:12:38,760 INFO    MainThread:6106 [wandb_run.py:_console_start():2494] atexit reg
+2025-08-11 19:12:38,760 INFO    MainThread:6106 [wandb_run.py:_redirect():2342] redirect: wrap_raw
+2025-08-11 19:12:38,760 INFO    MainThread:6106 [wandb_run.py:_redirect():2411] Wrapping output streams.
+2025-08-11 19:12:38,760 INFO    MainThread:6106 [wandb_run.py:_redirect():2434] Redirects installed.
+2025-08-11 19:12:38,761 INFO    MainThread:6106 [wandb_init.py:init():1075] run started, returning control to user process
+2025-08-11 19:14:47,124 INFO    MainThread:6106 [wandb_run.py:_finish():2260] finishing run ridb24-independent/structformer-flax/ultdiwxo
+2025-08-11 19:14:47,124 INFO    MainThread:6106 [wandb_run.py:_atexit_cleanup():2459] got exitcode: 0
+2025-08-11 19:14:47,124 INFO    MainThread:6106 [wandb_run.py:_restore():2441] restore
+2025-08-11 19:14:47,124 INFO    MainThread:6106 [wandb_run.py:_restore():2447] restore done
+2025-08-11 19:14:47,751 INFO    MainThread:6106 [wandb_run.py:_footer_history_summary_info():3895] rendering history
+2025-08-11 19:14:47,751 INFO    MainThread:6106 [wandb_run.py:_footer_history_summary_info():3927] rendering summary
+2025-08-11 19:14:47,752 INFO    MainThread:6106 [wandb_run.py:_footer_sync_info():3856] logging synced files

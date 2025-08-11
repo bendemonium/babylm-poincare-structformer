@@ -1,0 +1,46 @@
+{
+  "os": "Linux-6.8.0-1013-nvidia-64k-aarch64-with-glibc2.35",
+  "python": "CPython 3.10.12",
+  "startedAt": "2025-08-11T19:12:38.169278Z",
+  "args": [
+    "--config",
+    "configs/base.yaml",
+    "--output_dir",
+    "runs/full_structformer_only"
+  ],
+  "program": "/home/ubuntu/babylm-poincare-structformer/scripts/train.py",
+  "codePath": "scripts/train.py",
+  "codePathLocal": "scripts/train.py",
+  "git": {
+    "remote": "https://github.com/bendemonium/babylm-poincare-structformer.git",
+    "commit": "9fe0bc4e549ac24163308452b29aa2d5b304571a"
+  },
+  "email": "ridhib2422@gmail.com",
+  "root": "logs/structformer_run",
+  "host": "192-222-57-23",
+  "executable": "/home/ubuntu/babylm-poincare-structformer/bb-env/bin/python",
+  "cpu_count": 64,
+  "cpu_count_logical": 64,
+  "gpu": "NVIDIA GH200 480GB",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "4261618229248",
+      "used": "34713894912"
+    }
+  },
+  "memory": {
+    "total": "564443283456"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GH200 480GB",
+      "memoryTotal": "102625181696",
+      "cudaCores": 16896,
+      "architecture": "Hopper",
+      "uuid": "GPU-072d162c-a0a4-fdf3-b85b-60e03d16c9fc"
+    }
+  ],
+  "cudaVersion": "12.8",
+  "writerId": "7r3nske0f983oteglddilwk0x19lusw3"
+}
