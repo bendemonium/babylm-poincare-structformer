@@ -1,23 +1,24 @@
+#!/usr/bin/env python3
 """
-Train StructFormer + Poincaré on BabyLM-style data.
+Train StructFormer (+ optional Poincaré) on BabyLM-style data.
 
-Adds dry-run ablation flags:
+Dry-run flags:
   --dry_run_structformer_only        -> training.mode = "structformer_only"
   --dry_run_structformer_poincare    -> training.mode = "structformer_poincare"
 
 Dry runs also:
-  - force num_epochs = 1 (unless already smaller)
-  - clamp eval_interval_words to <= 200k for quick feedback
+  - force num_epochs = 1 (if larger)
+  - clamp eval_interval_words to <= 200k
 
-Final model still saved to 'main' by the training loop.
+Final model is saved to 'main' inside the training loop.
 """
 
 import os
 import argparse
 import pickle
 import logging
-from types import SimpleNamespace
 from typing import Any, Dict
+from types import SimpleNamespace
 
 import yaml
 import jax
@@ -31,37 +32,66 @@ from utils.train_utils import train_structformer_poincare
 
 
 # ---------------------------
-# Small helpers
+# Utilities
 # ---------------------------
-def _to_namespace(d: Dict[str, Any]) -> Any:
+def _to_namespace(d: Any) -> Any:
     if isinstance(d, dict):
         return SimpleNamespace(**{k: _to_namespace(v) for k, v in d.items()})
     if isinstance(d, list):
         return [_to_namespace(x) for x in d]
     return d
 
+def _get(cfg: Any, path: str, default=None):
+    """Safe getter for nested SimpleNamespace/dicts via dotted path (e.g., 'model.hidden_dim')."""
+    cur = cfg
+    for part in path.split('.'):
+        if isinstance(cur, SimpleNamespace) and hasattr(cur, part):
+            cur = getattr(cur, part)
+        elif isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
+            return default
+    return cur
+
 def _load_pickle_from_hub(repo_id: str, filename: str):
+    """Download a pickle file from an HF dataset repo and load it."""
     path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
     with open(path, "rb") as f:
         return pickle.load(f)
 
-def _load_datasets(cfg_ns):
-    dtype = getattr(cfg_ns.data, "type", "hf")
+def _load_datasets(cfg_ns: Any):
+    """
+    Returns (train, val)
+    - HF mode: returns Dataset objects
+    - pickle mode: returns python lists or dicts as saved in your .pkl
+    """
+    dtype = _get(cfg_ns, "data.type", _get(cfg_ns, "data.dataset_type", "hf"))
     if dtype == "hf":
-        ds = load_dataset(cfg_ns.data.hf_repo_id)
-        train_split = getattr(cfg_ns.data, "train_split", "train")
-        val_split = getattr(cfg_ns.data, "val_split", "validation")
+        hf_repo = _get(cfg_ns, "data.hf_repo_id")
+        if not hf_repo:
+            raise ValueError("In HF mode, data.hf_repo_id must be set.")
+        ds = load_dataset(hf_repo)
+        train_split = _get(cfg_ns, "data.train_split", "train")
+        val_split = _get(cfg_ns, "data.val_split", "validation")
         return ds[train_split], ds[val_split]
     elif dtype == "pickle":
-        tr_repo = cfg_ns.data.train_tokenized_repo
-        tr_file = cfg_ns.data.train_tokenized_file
-        va_repo = cfg_ns.data.val_tokenized_repo
-        va_file = cfg_ns.data.val_tokenized_file
+        tr_repo = _get(cfg_ns, "data.train_tokenized_repo")
+        tr_file = _get(cfg_ns, "data.train_tokenized_file")
+        va_repo = _get(cfg_ns, "data.val_tokenized_repo")
+        va_file = _get(cfg_ns, "data.val_tokenized_file")
         if not all([tr_repo, tr_file, va_repo, va_file]):
             raise ValueError("pickle mode requires train/val *_repo and *_file in config.data")
-        return _load_pickle_from_hub(tr_repo, tr_file), _load_pickle_from_hub(va_repo, va_file)
+        train_obj = _load_pickle_from_hub(tr_repo, tr_file)
+        val_obj = _load_pickle_from_hub(va_repo, va_file)
+        return train_obj, val_obj
     else:
         raise ValueError(f"Unknown data.type: {dtype}")
+
+def _maybe_int(x, default=None):
+    try:
+        return int(x)
+    except Exception:
+        return default
 
 
 # ---------------------------
@@ -84,12 +114,11 @@ def main():
         cfg_dict = yaml.safe_load(f)
     cfg = _to_namespace(cfg_dict)
 
-    # Optional output directory (mainly for logs/artifacts)
+    # Optional output directory
     if args.output_dir:
         os.makedirs(args.output_dir, exist_ok=True)
-        # if you want W&B/tensorboard etc. to live here, make sure your logging.yaml points inside
 
-    # Set dry-run mode if requested (flags override config)
+    # Dry-run mode resolution
     requested_mode = None
     if args.dry_run_structformer_only and args.dry_run_structformer_poincare:
         raise ValueError("Choose only one: --dry_run_structformer_only OR --dry_run_structformer_poincare")
@@ -102,73 +131,111 @@ def main():
     if not hasattr(cfg, "training"):
         cfg.training = SimpleNamespace()
 
-    # Thread the mode into config (so train_utils can switch losses/updates)
+    # Thread mode
     if requested_mode is not None:
         cfg.training.mode = requested_mode
     else:
-        # default if not set in YAML
         if not hasattr(cfg.training, "mode"):
             cfg.training.mode = "structformer_poincare"
 
-    # Shorten for dry runs (fast feedback): 1 epoch + tighter eval cadence
+    # Shorten for dry runs
     if requested_mode is not None:
-        current_epochs = int(getattr(cfg.training, "num_epochs", 1) or 1)
+        current_epochs = _maybe_int(_get(cfg, "training.num_epochs", 1), 1)
         cfg.training.num_epochs = min(current_epochs, 1)
-        current_eval_words = int(getattr(cfg.training, "eval_interval_words", 1_000_000))
+        current_eval_words = _maybe_int(_get(cfg, "training.eval_interval_words", 1_000_000), 1_000_000)
         cfg.training.eval_interval_words = min(current_eval_words, 200_000)
 
     # Seeding
-    seed = int(getattr(cfg, "seed", 42))
+    seed = _maybe_int(_get(cfg, "seed", _get(cfg, "system.seed", 42)), 42)
     key = jax.random.PRNGKey(seed)
 
-    # Tokenizer & pad_id
-    tok = AutoTokenizer.from_pretrained(cfg.vocab_name)
+    # Tokenizer name: prefer data.vocab_name, then top-level vocab_name, then 'gpt2'
+    vocab_name = _get(cfg, "data.vocab_name", _get(cfg, "vocab_name", "gpt2"))
+    tok = AutoTokenizer.from_pretrained(vocab_name)
+    # Infer pad id
     inferred_pad = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
-    if inferred_pad is None and getattr(cfg, "pad_id", None) is None:
+    if inferred_pad is None and _get(cfg, "pad_id") is None:
         raise ValueError("Tokenizer has no pad_token_id and no eos_token_id; set config.pad_id explicitly.")
-    if getattr(cfg, "pad_id", None) is None:
+    if _get(cfg, "pad_id") is None:
         cfg.pad_id = inferred_pad
 
-    # Build model (attention_input flag is read from cfg if present; default 'tangent')
-    attention_input = getattr(cfg, "attention_input", "tangent")
-    model = StructformerPoincare(
-        vocab_size=tok.vocab_size,
-        hidden_dim=cfg.hidden_dim,
-        num_layers=cfg.num_layers,
-        num_heads=cfg.num_heads,
-        max_length=cfg.max_length,
-        c=cfg.c,
-        dropout_rate=cfg.dropout_rate,
-        attention_input=attention_input,
-    )
+    # Model hyperparams (support nested 'model.*' or flat)
+    hidden_dim  = _get(cfg, "model.hidden_dim",  _get(cfg, "hidden_dim", 256))
+    num_layers  = _get(cfg, "model.num_layers",  _get(cfg, "num_layers", 8))
+    num_heads   = _get(cfg, "model.num_heads",   _get(cfg, "num_heads", 8))
+    max_length  = _get(cfg, "model.max_length",  _get(cfg, "max_length", 128))
+    curvature_c = _get(cfg, "model.c",           _get(cfg, "c", 1.0))
+    dropout     = _get(cfg, "model.dropout_rate", _get(cfg, "dropout_rate", 0.1))
 
-    # Logger (passes config for W&B enrichment)
+    # Build model
+    # Only pass 'attention_input' if the model actually accepts it
+    attention_input = _get(cfg, "attention_input", None)
+    try:
+        if attention_input is None:
+            model = StructformerPoincare(
+                vocab_size=tok.vocab_size,
+                hidden_dim=hidden_dim,
+                num_layers=num_layers,
+                num_heads=num_heads,
+                max_length=max_length,
+                c=curvature_c,
+                dropout_rate=dropout,
+            )
+        else:
+            # Some forks may accept this kwarg
+            model = StructformerPoincare(
+                vocab_size=tok.vocab_size,
+                hidden_dim=hidden_dim,
+                num_layers=num_layers,
+                num_heads=num_heads,
+                max_length=max_length,
+                c=curvature_c,
+                dropout_rate=dropout,
+                attention_input=attention_input,  # try; will fail if model doesn't accept it
+            )
+    except TypeError:
+        # Fallback: construct without that optional kwarg
+        model = StructformerPoincare(
+            vocab_size=tok.vocab_size,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            max_length=max_length,
+            c=curvature_c,
+            dropout_rate=dropout,
+        )
+
+    # Logger (W&B config enrichment)
     model_cfg_for_logging = SimpleNamespace(
         vocab_size=tok.vocab_size,
-        hidden_dim=cfg.hidden_dim,
-        num_layers=cfg.num_layers,
-        num_heads=cfg.num_heads,
-        max_length=cfg.max_length,
-        c=cfg.c,
+        hidden_dim=hidden_dim,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        max_length=max_length,
+        c=curvature_c,
         training=getattr(cfg, "training", None),
     )
-    logger = create_training_logger(cfg_dict, model_cfg_for_logging,
-                                    max_words=int(getattr(cfg.training, "max_words", 100_000_000)))
+    logger = create_training_logger(
+        cfg_dict,
+        model_cfg_for_logging,
+        max_words=int(_get(cfg, "training.max_words", 100_000_000)),
+    )
 
     # Data
     train_ds, val_ds = _load_datasets(cfg)
 
     # Friendly startup log
     logging.getLogger(__name__).info(
-        "Run mode: %s | epochs=%s | batch_size=%s | eval_every≈%s words | attention_input=%s",
+        "Run mode: %s | epochs=%s | batch_size=%s | eval_every≈%s words | vocab=%s | pad_id=%s",
         getattr(cfg.training, "mode", "structformer_poincare"),
-        getattr(cfg.training, "num_epochs", None),
-        getattr(cfg.training, "batch_size", None),
-        getattr(cfg.training, "eval_interval_words", None),
-        attention_input,
+        _get(cfg, "training.num_epochs", None),
+        _get(cfg, "training.batch_size", None),
+        _get(cfg, "training.eval_interval_words", None),
+        vocab_name,
+        str(cfg.pad_id),
     )
 
-    # Train (epochs-based; checkpoints/evals are word-based inside train_utils)
+    # Train (epochs-based; eval/checkpoints are word-based inside train_utils)
     _ = train_structformer_poincare(
         model=model,
         config=cfg,
@@ -184,3 +251,17 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# python scripts/train.py \
+#   --config configs/base.yaml \
+#   --dry_run_structformer_only \
+#   --output_dir runs/dry_structformer_only
+
+# python scripts/train.py \
+#   --config configs/base.yaml \
+#   --dry_run_structformer_poincare \
+#   --output_dir runs/dry_structformer_poincare
+
+# python scripts/train.py \
+#   --config configs/base.yaml \
+#   --output_dir runs/full_structformer_poincare
