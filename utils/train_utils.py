@@ -175,7 +175,7 @@ def compute_tree_regularizer_loss(
 # ----------------------------
 @partial(jax.jit, static_argnames=("model",))
 def train_step_single_pass(
-    dual_state: DualTrainState,
+    dual_state,
     batch: Dict[str, jnp.ndarray],
     model,
     c: float,
@@ -184,7 +184,7 @@ def train_step_single_pass(
     tau: float,
     batch_stats: Optional[Dict[str, Any]] = None,
     tree_data: Optional[Dict[str, jnp.ndarray]] = None,
-) -> Tuple[DualTrainState, Dict[str, jnp.ndarray], Dict[str, Any]]:
+):
     """
     True single forward pass:
       1) Run forward once to get (logits, hyperbolic_embeds, new_batch_stats)

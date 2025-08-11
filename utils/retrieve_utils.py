@@ -208,39 +208,43 @@ def get_tokenizer(vocab_name: str = "gpt2"):
         raise
 
 
-def prepare_batch_data(
-    examples: List[Dict],
-    max_length: int = 128,
-    pad_token_id: int = 50256
-) -> Dict[str, jnp.ndarray]:
+def prepare_batch_data(batch, max_length, pad_token_id):
     """
-    Prepare batch data for training with proper padding and attention masks.
-    
-    Args:
-        examples: List of examples with 'input_ids' key
-        max_length: Maximum sequence length
-        pad_token_id: Padding token ID
-        
-    Returns:
-        Dictionary with 'input_ids' and 'attention_mask' arrays
+    Prepare a batch for training/evaluation.
+
+    Handles both:
+    - raw token ID sequences (list[int] or np.ndarray)
+    - HF-style dicts with 'input_ids' and optional 'attention_mask'
     """
-    batch_size = len(examples)
-    
-    # Initialize arrays
+    import numpy as np
+
+    batch_size = len(batch)
     input_ids = np.full((batch_size, max_length), pad_token_id, dtype=np.int32)
-    attention_mask = np.zeros((batch_size, max_length), dtype=np.float32)
-    
-    for i, example in enumerate(examples):
-        tokens = example['input_ids']
+    attention_mask = np.zeros((batch_size, max_length), dtype=np.int32)
+
+    for i, item in enumerate(batch):
+        # If HF/dict style, unwrap input_ids
+        if isinstance(item, dict):
+            tokens = item.get("input_ids", item)  # fallback to item if key missing
+            attn = item.get("attention_mask", None)
+        else:
+            tokens = item
+            attn = None
+
+        # Ensure it's a list/array of ints
+        tokens = list(tokens)
+
         seq_len = min(len(tokens), max_length)
-        
-        # Fill in actual tokens and mask
         input_ids[i, :seq_len] = tokens[:seq_len]
-        attention_mask[i, :seq_len] = 1.0
-    
+
+        if attn is not None:
+            attention_mask[i, :seq_len] = attn[:seq_len]
+        else:
+            attention_mask[i, :seq_len] = 1  # default to 1 where tokens exist
+
     return {
-        'input_ids': jnp.array(input_ids),
-        'attention_mask': jnp.array(attention_mask)
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
     }
 
 

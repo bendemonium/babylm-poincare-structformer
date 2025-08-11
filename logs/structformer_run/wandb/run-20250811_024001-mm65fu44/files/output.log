@@ -1,0 +1,9 @@
+02:40:02 |     INFO | utils.logging_utils | ✅ W&B initialized: structformer-flax/run-babylm-poincare
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 186, in <module>
+    main()
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 159, in main
+    train_ds, val_ds = _load_datasets(cfg)
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 56, in _load_datasets
+    tr_repo = cfg_ns.data.train_tokenized_repo
+AttributeError: 'types.SimpleNamespace' object has no attribute 'train_tokenized_repo'

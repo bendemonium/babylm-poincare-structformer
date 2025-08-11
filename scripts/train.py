@@ -57,7 +57,23 @@ def _load_pickle_from_hub(repo_id: str, filename: str):
     """Download a pickle file from an HF dataset repo and load it."""
     path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
     with open(path, "rb") as f:
-        return pickle.load(f)
+        data = pickle.load(f)
+
+    # Case 1: dict-of-lists → convert to list-of-dicts
+    if isinstance(data, dict) and "input_ids" in data and "attention_mask" in data:
+        data = [
+            {"input_ids": ids, "attention_mask": mask}
+            for ids, mask in zip(data["input_ids"], data["attention_mask"])
+        ]
+
+    # Case 2: already list-of-dicts → nothing to do
+    elif isinstance(data, list) and isinstance(data[0], dict):
+        pass
+
+    else:
+        raise ValueError(f"Unexpected pickle format in {filename}: {type(data)}")
+
+    return data
 
 def _load_datasets(cfg_ns: Any):
     """

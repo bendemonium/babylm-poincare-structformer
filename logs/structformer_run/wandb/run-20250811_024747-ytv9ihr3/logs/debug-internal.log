@@ -1,0 +1,13 @@
+{"time":"2025-08-11T02:47:47.654300356Z","level":"INFO","msg":"stream: starting","core version":"0.21.1"}
+{"time":"2025-08-11T02:47:47.810109064Z","level":"INFO","msg":"stream: created new stream","id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:47.810133032Z","level":"INFO","msg":"stream: started","id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:47.810548107Z","level":"INFO","msg":"writer: started","stream_id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:47.810609228Z","level":"INFO","msg":"sender: started","stream_id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:47.810691341Z","level":"INFO","msg":"handler: started","stream_id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:47.94014046Z","level":"ERROR","msg":"git repo not found","error":"repository does not exist"}
+{"time":"2025-08-11T02:47:56.177967329Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-08-11T02:47:56.297435051Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-08-11T02:47:56.299012216Z","level":"INFO","msg":"stream: closing","id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:56.299025656Z","level":"INFO","msg":"handler: closed","stream_id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:56.299062777Z","level":"INFO","msg":"sender: closed","stream_id":"ytv9ihr3"}
+{"time":"2025-08-11T02:47:56.299073689Z","level":"INFO","msg":"stream: closed","id":"ytv9ihr3"}

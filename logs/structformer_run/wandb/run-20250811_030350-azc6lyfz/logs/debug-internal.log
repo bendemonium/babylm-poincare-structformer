@@ -1,0 +1,13 @@
+{"time":"2025-08-11T03:03:50.811373093Z","level":"INFO","msg":"stream: starting","core version":"0.21.1"}
+{"time":"2025-08-11T03:03:50.967735194Z","level":"INFO","msg":"stream: created new stream","id":"azc6lyfz"}
+{"time":"2025-08-11T03:03:50.967809851Z","level":"INFO","msg":"stream: started","id":"azc6lyfz"}
+{"time":"2025-08-11T03:03:50.967816187Z","level":"INFO","msg":"handler: started","stream_id":"azc6lyfz"}
+{"time":"2025-08-11T03:03:50.967831643Z","level":"INFO","msg":"sender: started","stream_id":"azc6lyfz"}
+{"time":"2025-08-11T03:03:50.967843483Z","level":"INFO","msg":"writer: started","stream_id":"azc6lyfz"}
+{"time":"2025-08-11T03:03:51.134050757Z","level":"ERROR","msg":"git repo not found","error":"repository does not exist"}
+{"time":"2025-08-11T03:04:00.50763945Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-08-11T03:04:00.676577084Z","level":"INFO","msg":"handler: operation stats","stats":{}}
+{"time":"2025-08-11T03:04:00.678065896Z","level":"INFO","msg":"stream: closing","id":"azc6lyfz"}
+{"time":"2025-08-11T03:04:00.678080168Z","level":"INFO","msg":"handler: closed","stream_id":"azc6lyfz"}
+{"time":"2025-08-11T03:04:00.678115433Z","level":"INFO","msg":"sender: closed","stream_id":"azc6lyfz"}
+{"time":"2025-08-11T03:04:00.678126569Z","level":"INFO","msg":"stream: closed","id":"azc6lyfz"}
