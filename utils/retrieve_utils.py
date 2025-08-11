@@ -37,6 +37,7 @@ def load_pickle_from_hub(repo_id: str, filename: str, repo_type: str = "dataset"
     Returns:
         Unpickled data object
     """
+<<<<<<< HEAD
     try:
         logger.info(f"Downloading {filename} from {repo_id} (type: {repo_type})")
         
@@ -60,6 +61,17 @@ def load_pickle_from_hub(repo_id: str, filename: str, repo_type: str = "dataset"
     except Exception as e:
         logger.error(f"Failed to load pickle from {repo_id}/{filename}: {str(e)}")
         raise
+=======
+    from huggingface_hub import hf_hub_download
+
+    # Download the pickle file from HF repo
+    file_path = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=cache_dir, repo_type="dataset")
+
+    # Load pickle from local file
+    with open(file_path, "rb") as f:
+        obj = pickle.load(f)
+    return obj
+>>>>>>> df6eaca37f386ed98e78fa1319216e728352580a
 
 
 def load_hf_dataset(
