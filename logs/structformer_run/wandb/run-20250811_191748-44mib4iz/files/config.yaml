@@ -1,0 +1,94 @@
+_wandb:
+    value:
+        cli_version: 0.21.1
+        code_path: code/scripts/train.py
+        e:
+            rfmpgv1nv7xzp3dy7tryyyr3ek11tog8:
+                args:
+                    - --config
+                    - configs/base.yaml
+                    - --output_dir
+                    - runs/full_structformer_only
+                codePath: scripts/train.py
+                codePathLocal: scripts/train.py
+                cpu_count: 64
+                cpu_count_logical: 64
+                cudaVersion: "12.8"
+                disk:
+                    /:
+                        total: "4261618229248"
+                        used: "39643680768"
+                email: ridhib2422@gmail.com
+                executable: /home/ubuntu/babylm-poincare-structformer/bb-env/bin/python
+                git:
+                    commit: 9fe0bc4e549ac24163308452b29aa2d5b304571a
+                    remote: https://github.com/bendemonium/babylm-poincare-structformer.git
+                gpu: NVIDIA GH200 480GB
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Hopper
+                      cudaCores: 16896
+                      memoryTotal: "102625181696"
+                      name: NVIDIA GH200 480GB
+                      uuid: GPU-072d162c-a0a4-fdf3-b85b-60e03d16c9fc
+                host: 192-222-57-23
+                memory:
+                    total: "564443283456"
+                os: Linux-6.8.0-1013-nvidia-64k-aarch64-with-glibc2.35
+                program: /home/ubuntu/babylm-poincare-structformer/scripts/train.py
+                python: CPython 3.10.12
+                root: logs/structformer_run
+                startedAt: "2025-08-11T19:17:48.092662Z"
+                writerId: rfmpgv1nv7xzp3dy7tryyyr3ek11tog8
+        m: []
+        python_version: 3.10.12
+        t:
+            "1":
+                - 1
+                - 11
+                - 12
+                - 45
+                - 49
+                - 51
+            "2":
+                - 1
+                - 11
+                - 12
+                - 45
+                - 49
+                - 51
+            "3":
+                - 2
+                - 13
+                - 16
+            "4": 3.10.12
+            "5": 0.21.1
+            "6": 4.55.0
+            "12": 0.21.1
+            "13": linux-aarch64
+batch_size:
+    value: 128
+framework:
+    value: jax_flax
+hidden_dim:
+    value: 256
+hyperbolic_c:
+    value: 1
+lambda_poincare:
+    value: null
+lr_ce:
+    value: 0.0002
+lr_riem:
+    value: 0.0001
+max_length:
+    value: 128
+max_words:
+    value: 100000000
+model_type:
+    value: structformer_poincare
+num_heads:
+    value: 8
+num_layers:
+    value: 8
+vocab_size:
+    value: 50257

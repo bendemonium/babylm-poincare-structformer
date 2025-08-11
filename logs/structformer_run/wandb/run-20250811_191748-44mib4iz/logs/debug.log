@@ -19,3 +19,10 @@ config: {'model_type': 'structformer_poincare', 'framework': 'jax_flax', 'vocab_
 2025-08-11 19:17:48,719 INFO    MainThread:9485 [wandb_run.py:_redirect():2411] Wrapping output streams.
 2025-08-11 19:17:48,719 INFO    MainThread:9485 [wandb_run.py:_redirect():2434] Redirects installed.
 2025-08-11 19:17:48,720 INFO    MainThread:9485 [wandb_init.py:init():1075] run started, returning control to user process
+2025-08-11 20:00:17,540 INFO    MainThread:9485 [wandb_run.py:_finish():2260] finishing run ridb24-independent/structformer-flax/44mib4iz
+2025-08-11 20:00:17,540 INFO    MainThread:9485 [wandb_run.py:_atexit_cleanup():2459] got exitcode: 0
+2025-08-11 20:00:17,540 INFO    MainThread:9485 [wandb_run.py:_restore():2441] restore
+2025-08-11 20:00:17,540 INFO    MainThread:9485 [wandb_run.py:_restore():2447] restore done
+2025-08-11 20:00:18,029 INFO    MainThread:9485 [wandb_run.py:_footer_history_summary_info():3895] rendering history
+2025-08-11 20:00:18,031 INFO    MainThread:9485 [wandb_run.py:_footer_history_summary_info():3927] rendering summary
+2025-08-11 20:00:18,032 INFO    MainThread:9485 [wandb_run.py:_footer_sync_info():3856] logging synced files
