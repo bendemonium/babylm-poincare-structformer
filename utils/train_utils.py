@@ -1,3 +1,4 @@
+# utils/train_utils.py
 """
 Training utilities for StructFormer + Poincaré training
 
@@ -22,15 +23,15 @@ from flax.training import train_state
 from flax import struct
 import optax
 
-from .hyperbolic_geometry import (
+from models.hyperbolic_geometry import (
     riemannian_gradient_conversion,
     poincare_proj,
     hyperbolic_diagnostics,
     poincare_distance_capped,
 )
-from .logging_utils import TrainingLogger
-from .save_utils import save_checkpoint_branch
-from .retrieve_utils import create_data_iterator
+from utils.logging_utils import TrainingLogger
+from utils.save_utils import save_checkpoint_branch
+from utils.retrieve_utils import create_data_iterator
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +198,7 @@ def train_step_single_pass(
         batch_stats = {}
 
     def fwd(params, inputs, attn_mask, mutable_stats):
-        (outs, new_mut) = model.apply(
+        outs, new_mut = model.apply(
             {"params": params, "batch_stats": mutable_stats},
             inputs,
             attn_mask,
@@ -205,13 +206,13 @@ def train_step_single_pass(
             mutable=["batch_stats"],
             rngs={"dropout": jax.random.PRNGKey(0)},
         )
-        # Return both heads we’ll differentiate wrt
+        # Return both heads we’ll differentiate wrt; aux is new_mut
         return (outs["logits"], outs["hyperbolic_embeds"]), new_mut
 
     merged_params = {**dual_state.other_state.params, **dual_state.embed_state.params}
 
-    # Run forward once, get VJP pullback
-    ((logits, hyp_embeds), new_mutable), pullback = jax.vjp(
+    # --- Correct JAX VJP unpack: (outputs, vjp_fun, aux) ---
+    outputs, pullback, new_mutable = jax.vjp(
         fwd,
         merged_params,
         batch["input_ids"],
@@ -219,6 +220,7 @@ def train_step_single_pass(
         batch_stats,
         has_aux=True,
     )
+    logits, hyp_embeds = outputs
 
     # Compute scalar losses
     ce = compute_ce_loss(logits, batch["input_ids"], batch.get("attention_mask"))
@@ -241,8 +243,9 @@ def train_step_single_pass(
 
     dCE_dlogits = jax.grad(ce_wrt_logits)(logits)
     dHYP_dembeds = jax.grad(hyp_wrt_embeds)(hyp_embeds)
-    zero_logits = jax.tree_map(jnp.zeros_like, logits)
-    zero_embeds = jax.tree_map(jnp.zeros_like, hyp_embeds)
+    from jax import tree_util as jtu  # put at top near other imports
+    zero_logits = jtu.tree_map(jnp.zeros_like, logits)
+    zero_embeds = jtu.tree_map(jnp.zeros_like, hyp_embeds)
 
     # Pull back cotangents to param grads (params is the first arg)
     grads_params_ce, _, _, _ = pullback((dCE_dlogits, zero_embeds))
@@ -447,7 +450,7 @@ def run_training_loop(
                 # Word-based milestones for checkpointing (may cross multiple)
                 while milestones.size > 0 and next_idx < milestones.size and words_processed >= float(milestones[next_idx]):
                     milestone_words = int(milestones[next_idx])
-                    branch_name = f"{config.checkpointing.branch_prefix}_checkpoint_{milestone_words//1_000_000}M_words"
+                    branch_name = f"{config.checkpointing.branch_prefix}_{milestone_words//1_000_000}M_words"
 
                     try:
                         save_checkpoint_branch(
@@ -605,7 +608,7 @@ def load_checkpoint_and_resume(
     sample_input: Dict[str, jnp.ndarray],
 ) -> Tuple[DualTrainState, int, float, Dict[str, Any]]:
     """Load from HF Hub (repo/branch) and reconstruct DualTrainState."""
-    from .save_utils import load_checkpoint_from_hub
+    from utils.save_utils import load_checkpoint_from_hub
 
     if "/" in checkpoint_path:
         parts = checkpoint_path.split("/")
@@ -703,7 +706,7 @@ def train_structformer_poincare(
         train_logger.logger.info("🆕 Starting fresh training")
 
     # Quick model summary
-    from .logging_utils import log_model_summary
+    from utils.logging_utils import log_model_summary
 
     merged_params = dual_state.get_merged_params()
     log_model_summary(train_logger, model, merged_params, sample_input)
@@ -723,3 +726,147 @@ def train_structformer_poincare(
         "🎉 Training completed! Final words processed: %s", f"{final_words:,}"
     )
     return final_dual_state
+
+# ----------------------------
+# Back-compat wrappers for utils/test_utils.py
+# ----------------------------
+def create_train_states(
+    rng: jax.random.PRNGKey,
+    model,
+    vocab_size: int,
+    seq_len: int,
+    lr_ce: float = 1e-3,
+    lr_riem: float = 1e-3,
+    c: float = 1.0,
+):
+    """Initialize two TrainStates (embed vs. other) for smoke tests."""
+    # Minimal sample input
+    sample = {
+        "input_ids": jnp.zeros((1, seq_len), dtype=jnp.int32),
+        "attention_mask": jnp.ones((1, seq_len), dtype=jnp.float32),
+    }
+    variables = model.init(rng, **sample, training=False)
+    params = variables["params"]
+
+    embed_params = {"embed_table": params["embed_table"]}
+    other_params = {k: v for k, v in params.items() if k != "embed_table"}
+
+    embed_opt = optax.adamw(lr_riem)
+    other_opt = optax.adamw(lr_ce)
+
+    state_embed = train_state.TrainState.create(apply_fn=model.apply, params=embed_params, tx=embed_opt)
+    state_other = train_state.TrainState.create(apply_fn=model.apply, params=other_params, tx=other_opt)
+
+    # Safety projection
+    safe_embed = poincare_proj(state_embed.params["embed_table"], c, eps_margin=1e-4)
+    state_embed = state_embed.replace(params={"embed_table": safe_embed})
+    return state_embed, state_other
+
+
+def train_step(
+    state_embed,
+    state_other,
+    batch: Dict[str, jnp.ndarray],
+    c: float,
+    lambda_poincare: float,
+    model,
+):
+    """One training step for smoke tests. Returns (new_state_embed, new_state_other, metrics)."""
+    dual = DualTrainState(state_embed, state_other)
+    new_dual, metrics, _ = train_step_single_pass(
+        dual_state=dual,
+        batch=batch,
+        model=model,
+        c=float(c),
+        lambda_h=float(lambda_poincare),
+        lambda_tree=0.0,
+        tau=1.0,
+        batch_stats={},       # not needed for smoke tests
+        tree_data=None,
+    )
+    return new_dual.embed_state, new_dual.other_state, metrics
+
+
+def eval_step(
+    state_embed,
+    state_other,
+    batch: Dict[str, jnp.ndarray],
+    c: float,
+    lambda_poincare: float,  # unused, kept for interface compatibility
+    model,
+):
+    """Eval step for smoke tests. Returns a dict of metrics."""
+    dual = DualTrainState(state_embed, state_other)
+    return _eval_step_internal(
+        dual_state=dual,
+        batch=batch,
+        model=model,
+        c=float(c),
+        batch_stats={},
+    )
+
+
+def eval_epoch(
+    state_embed,
+    state_other,
+    val_data,
+    batch_size: int,
+    c: float,
+    lambda_poincare: float,  # unused, kept for interface compatibility
+    model,
+    dataset_type: str = "hf",
+    max_batches: Optional[int] = None,
+):
+    """Mini eval loop used by test_utils; supports HF-style datasets only."""
+    dual = DualTrainState(state_embed, state_other)
+
+    total = {"eval_ce_loss": 0.0, "eval_poincare_loss": 0.0, "eval_total_loss": 0.0}
+    n = 0
+
+    if dataset_type == "hf":
+        length = len(val_data)
+        for start in range(0, length, batch_size):
+            if max_batches is not None and n >= max_batches:
+                break
+            sl = val_data[start:start + batch_size]
+            batch = {
+                "input_ids": jnp.array(sl["input_ids"]),
+                "attention_mask": jnp.array(sl["attention_mask"]),
+            }
+            m = _eval_step_internal(dual, batch, model, float(c), batch_stats={})
+            total["eval_ce_loss"] += float(m["eval_ce_loss"])
+            total["eval_poincare_loss"] += float(m["eval_poincare_loss"])
+            total["eval_total_loss"] += float(m["eval_total_loss"])
+            n += 1
+    else:
+        # Simple Python iterable of dicts
+        buf = []
+        for ex in val_data:
+            buf.append(ex)
+            if len(buf) == batch_size:
+                if max_batches is not None and n >= max_batches:
+                    break
+                batch = {
+                    "input_ids": jnp.array([e["input_ids"] for e in buf]),
+                    "attention_mask": jnp.array([e["attention_mask"] for e in buf]),
+                }
+                m = _eval_step_internal(dual, batch, model, float(c), batch_stats={})
+                total["eval_ce_loss"] += float(m["eval_ce_loss"])
+                total["eval_poincare_loss"] += float(m["eval_poincare_loss"])
+                total["eval_total_loss"] += float(m["eval_total_loss"])
+                n += 1
+                buf = []
+        if buf and (max_batches is None or n < max_batches):
+            batch = {
+                "input_ids": jnp.array([e["input_ids"] for e in buf]),
+                "attention_mask": jnp.array([e["attention_mask"] for e in buf]),
+            }
+            m = _eval_step_internal(dual, batch, model, float(c), batch_stats={})
+            total["eval_ce_loss"] += float(m["eval_ce_loss"])
+            total["eval_poincare_loss"] += float(m["eval_poincare_loss"])
+            total["eval_total_loss"] += float(m["eval_total_loss"])
+            n += 1
+
+    if n == 0:
+        return {k: 0.0 for k in total}
+    return {k: v / n for k, v in total.items()}

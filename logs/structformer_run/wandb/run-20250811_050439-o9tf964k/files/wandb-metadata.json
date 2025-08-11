@@ -1,0 +1,47 @@
+{
+  "os": "Linux-6.8.0-60-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.12",
+  "startedAt": "2025-08-11T05:04:39.853203Z",
+  "args": [
+    "--config",
+    "configs/base.yaml",
+    "--dry_run_structformer_only",
+    "--output_dir",
+    "runs/dry_structformer_only"
+  ],
+  "program": "/home/ubuntu/babylm-poincare-structformer/scripts/train.py",
+  "codePath": "scripts/train.py",
+  "codePathLocal": "scripts/train.py",
+  "git": {
+    "remote": "https://github.com/bendemonium/babylm-poincare-structformer.git",
+    "commit": "e00d72b8f7c82c75d1542154d4671ca6f810f52a"
+  },
+  "email": "ridhib2422@gmail.com",
+  "root": "logs/structformer_run",
+  "host": "146-235-223-214",
+  "executable": "/home/ubuntu/babylm-poincare-structformer/bb-env/bin/python",
+  "cpu_count": 30,
+  "cpu_count_logical": 30,
+  "gpu": "NVIDIA A10",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "1456701079552",
+      "used": "47949885440"
+    }
+  },
+  "memory": {
+    "total": "238546464768"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA A10",
+      "memoryTotal": "24146608128",
+      "cudaCores": 9216,
+      "architecture": "Ampere",
+      "uuid": "GPU-cb1d9cb2-45a9-ceaf-a0b0-c7bc75a1ac8a"
+    }
+  ],
+  "cudaVersion": "12.8",
+  "writerId": "az4mn5kzx89qwkhbm95cejkim7st0w2t"
+}

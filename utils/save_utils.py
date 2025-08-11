@@ -1,6 +1,6 @@
 """
 Save utilities for StructFormer + Poincaré training
-Handles checkpointing, HuggingFace Hub uploads, and model serialization
+Handles checkpointing, Hugging Face Hub uploads, and model serialization.
 """
 
 import os
@@ -15,7 +15,14 @@ import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 from flax.serialization import to_bytes, from_bytes
-from huggingface_hub import HfApi, create_repo, upload_folder
+
+from huggingface_hub import (
+    HfApi,
+    create_repo,
+    upload_folder,
+    snapshot_download,
+)
+from huggingface_hub.errors import HfHubHTTPError
 
 from models.hyperbolic_geometry import hyperbolic_diagnostics
 
@@ -25,18 +32,18 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ----------------------------
 def _now_iso() -> str:
-    # jnp.datetime64('now') is unreliable; use real clock
     return datetime.now(timezone.utc).isoformat()
 
 def _is_jax_array(x: Any) -> bool:
-    # JAX 0.6.x unified arrays
-    return hasattr(x, "__class__") and x.__class__.__name__ in {"Array", "DeviceArray"}
+    # Compatible with recent JAX (unified Array), but doesn’t crash on older versions
+    return isinstance(x, jax.Array) or x.__class__.__name__ in {"Array", "DeviceArray"}
 
 def make_json_serializable(obj):
     """
     Recursively convert objects to JSON-serializable format.
+    Keeps large arrays summarized instead of dumping GBs into JSON.
     """
-    if hasattr(obj, "__dict__"):
+    if hasattr(obj, "__dict__") and not isinstance(obj, dict):
         return {k: make_json_serializable(v) for k, v in obj.__dict__.items()}
     if hasattr(obj, "_asdict"):
         return {k: make_json_serializable(v) for k, v in obj._asdict().items()}
@@ -46,23 +53,25 @@ def make_json_serializable(obj):
         return [make_json_serializable(v) for v in obj]
     if _is_jax_array(obj):
         try:
-            # Don’t explode JSON with huge arrays
-            return obj.tolist() if obj.size < 100 else f"JAX array shape {tuple(obj.shape)}"
+            size = int(obj.size)
+            if size <= 100:
+                return obj.tolist()
+            return f"jax.Array(shape={tuple(obj.shape)}, dtype={obj.dtype})"
         except Exception:
-            return "JAX array"
+            return "jax.Array"
     if isinstance(obj, (int, float, str, bool)) or obj is None:
         return obj
     return str(obj)
 
 def sanitize(obj: Any) -> Any:
-    """Sanitize objects (e.g. JAX arrays) for JSON serialization."""
+    """Sanitize objects (e.g., JAX arrays) for JSON serialization."""
     return make_json_serializable(obj)
 
 # ----------------------------
 # Config & metadata
 # ----------------------------
 class CheckpointConfig:
-    """Configuration for checkpointing and saving."""
+    """Small helper if you need to wrap raw dict configs."""
     def __init__(self, config_dict):
         self.checkpointing = config_dict.get("checkpointing", {})
         self.use_word_milestones = self.checkpointing.get("use_word_milestones", True)
@@ -70,7 +79,7 @@ class CheckpointConfig:
         self.output_repo_id = self.checkpointing.get("output_repo_id")
         self.branch_prefix = self.checkpointing.get("branch_prefix", "checkpoint")
         self.include_modeling_files = self.checkpointing.get("include_modeling_files", [])
-        self.model_file = self.checkpointing.get("model_file", "models/structformer_poincare")
+        self.model_file = self.checkpointing.get("model_file", "models/structformer_poincare.py")
 
         self.logging = config_dict.get("logging", {})
         self.log_dir = self.logging.get("log_dir", "logs/structformer_run")
@@ -78,6 +87,7 @@ class CheckpointConfig:
 def write_config(config, save_dir: str, model_file: Optional[str] = None):
     """
     Write configuration to JSON (with metadata).
+    Accepts either a dict-like or a SimpleNamespace.
     """
     os.makedirs(save_dir, exist_ok=True)
     cfg = make_json_serializable(config)
@@ -90,7 +100,7 @@ def write_config(config, save_dir: str, model_file: Optional[str] = None):
     path = os.path.join(save_dir, "config.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
-    logger.info(f"✅ Config saved to {path}")
+    logger.info("✅ Config saved to %s", path)
 
 # ----------------------------
 # Local checkpoints (Flax)
@@ -123,7 +133,7 @@ def save_flax_checkpoint(
         keep=5,
         overwrite=True,
     )
-    logger.info(f"✅ Flax checkpoint saved: {save_dir}/{prefix}_{step}")
+    logger.info("✅ Flax checkpoint saved: %s/%s_%s", save_dir, prefix, step)
 
 def load_flax_checkpoint(
     ckpt_dir: str,
@@ -134,7 +144,7 @@ def load_flax_checkpoint(
     Load a checkpoint (latest if step is None).
     """
     if not os.path.exists(ckpt_dir):
-        logger.warning(f"Checkpoint directory not found: {ckpt_dir}")
+        logger.warning("Checkpoint directory not found: %s", ckpt_dir)
         return None
     data = checkpoints.restore_checkpoint(
         ckpt_dir=ckpt_dir,
@@ -143,9 +153,9 @@ def load_flax_checkpoint(
         prefix=prefix,
     )
     if data is None:
-        logger.warning(f"No checkpoint found in {ckpt_dir}")
+        logger.warning("No checkpoint found in %s", ckpt_dir)
         return None
-    logger.info(f"✅ Loaded checkpoint from {ckpt_dir}, step {data.get('step', 'unknown')}")
+    logger.info("✅ Loaded checkpoint from %s, step %s", ckpt_dir, data.get("step", "unknown"))
     return data
 
 def save_training_state(
@@ -179,30 +189,39 @@ def save_training_state(
 
     # 3) Config
     write_config(config, save_dir)
-    logger.info(f"✅ Training state saved to {save_dir}")
+    logger.info("✅ Training state saved to %s", save_dir)
 
 # ----------------------------
 # Hugging Face Hub
 # ----------------------------
-def create_huggingface_repo(repo_id: str, private: bool = True, repo_type: str = "model", create_main_branch: bool = True):
+def _ensure_hf_repo(repo_id: str, private: bool = True, repo_type: str = "model"):
     """
-    Create HF repo if it doesn't exist.
+    Create the HF repo if needed. No-op if it already exists.
     """
     api = HfApi()
     try:
-        api.repo_info(repo_id, repo_type=repo_type)
-        logger.info(f"Repository {repo_id} already exists")
+        _ = api.repo_info(repo_id=repo_id, repo_type=repo_type)
+        logger.info("HF repo %s exists", repo_id)
         return
     except Exception:
         pass
     create_repo(repo_id=repo_id, private=private, repo_type=repo_type, exist_ok=True)
-    if create_main_branch:
-        # Optional: ensure main branch exists (usually created automatically)
-        try:
-            api.create_branch(repo_id, branch="main", repo_type=repo_type)
-        except Exception:
-            pass
-    logger.info(f"✅ Created HuggingFace repository: {repo_id}")
+    logger.info("✅ Created HF repo: %s", repo_id)
+
+def _ensure_hf_branch(repo_id: str, branch: str, repo_type: str = "model"):
+    """
+    Create the branch if missing. Ignore 409 (already exists).
+    """
+    api = HfApi()
+    try:
+        api.create_branch(repo_id=repo_id, branch=branch, repo_type=repo_type)
+        logger.info("✅ Created branch %s for %s", branch, repo_id)
+    except HfHubHTTPError as e:
+        # 409 Conflict -> already exists
+        if getattr(e, "response", None) is not None and e.response.status_code == 409:
+            logger.info("Branch %s already exists for %s", branch, repo_id)
+        else:
+            raise
 
 def copy_modeling_files(source_files: List[str], target_dir: str):
     """
@@ -210,13 +229,13 @@ def copy_modeling_files(source_files: List[str], target_dir: str):
     """
     for src in source_files or []:
         if not os.path.exists(src):
-            logger.warning(f"Modeling file not found: {src}")
+            logger.warning("Modeling file not found: %s", src)
             continue
-        rel = os.path.normpath(src)  # preserve relative structure as given
+        rel = os.path.normpath(src)  # keep relative structure as given
         dst = os.path.join(target_dir, rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
-        logger.info(f"Copied {src} → {dst}")
+        logger.info("Copied %s → %s", src, dst)
 
 def save_checkpoint_branch(
     params: Dict,
@@ -233,19 +252,21 @@ def save_checkpoint_branch(
 ):
     """
     Package and upload a checkpoint to a specific Hub branch.
+    Ensures the repo and the branch exist before upload.
     """
-    logger.info(f"Saving checkpoint to branch {branch_name}...")
+    logger.info("Saving checkpoint to branch %s...", branch_name)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # 1) Ensure repo
-        create_huggingface_repo(repo_id, private=True, repo_type="model")
+        # 1) Repo + branch
+        _ensure_hf_repo(repo_id, private=True, repo_type="model")
+        _ensure_hf_branch(repo_id, branch_name, repo_type="model")
 
         # 2) Params
         params_path = os.path.join(tmp_dir, "model_params.flax")
         with open(params_path, "wb") as f:
             f.write(to_bytes(params))
 
-        # 3) Opt states
+        # 3) Optimizer states (optional)
         if opt_state_embed is not None:
             with open(os.path.join(tmp_dir, "opt_state_embed.flax"), "wb") as f:
                 f.write(to_bytes(opt_state_embed))
@@ -256,7 +277,7 @@ def save_checkpoint_branch(
         # 4) Config
         write_config(config, tmp_dir, model_file)
 
-        # 5) Metadata (optionally include diagnostics on the *embedding table*)
+        # 5) Metadata (optionally include diagnostics on the embedding table)
         metadata = {
             "step": int(step),
             "words_processed": int(words_processed),
@@ -266,17 +287,16 @@ def save_checkpoint_branch(
             "timestamp": _now_iso(),
         }
         try:
-            # If params contain the embedding table, log geometry stats
             embed = None
-            # Common Flax param structure: params['embed_table'] or params['params']['embed_table']
             if isinstance(params, dict) and "embed_table" in params:
                 embed = params["embed_table"]
             elif isinstance(params, dict) and "params" in params and isinstance(params["params"], dict):
                 if "embed_table" in params["params"]:
                     embed = params["params"]["embed_table"]
             if embed is not None:
+                curvature = float(getattr(config, "c", 1.0))
                 metadata["hyperbolic_diagnostics"] = make_json_serializable(
-                    hyperbolic_diagnostics(embed, getattr(config, "c", 1.0))
+                    hyperbolic_diagnostics(embed, curvature)
                 )
         except Exception:
             pass
@@ -284,7 +304,7 @@ def save_checkpoint_branch(
         with open(os.path.join(tmp_dir, "training_metadata.json"), "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-        # 6) Modeling files
+        # 6) Modeling files (optional)
         if include_modeling_files:
             copy_modeling_files(include_modeling_files, tmp_dir)
 
@@ -312,18 +332,18 @@ Checkpoint from training StructFormer with Poincaré (hyperbolic) embeddings.
         with open(os.path.join(tmp_dir, "README.md"), "w", encoding="utf-8") as f:
             f.write(readme)
 
-        # 8) Upload
-        logger.info(f"Uploading to {repo_id}@{branch_name} ...")
+        # 8) Upload to the branch
+        logger.info("Uploading to %s@%s ...", repo_id, branch_name)
         upload_folder(
             folder_path=tmp_dir,
             repo_id=repo_id,
             repo_type="model",
-            revision=branch_name,        # will create the branch if it doesn't exist
+            revision=branch_name,  # now guaranteed to exist
             commit_message=f"Checkpoint at {words_processed:,} words (step {step:,})",
             create_pr=False,
         )
 
-    logger.info(f"✅ Checkpoint saved to {repo_id}/{branch_name}")
+    logger.info("✅ Checkpoint saved to %s/%s", repo_id, branch_name)
 
 def load_checkpoint_from_hub(
     repo_id: str,
@@ -334,9 +354,7 @@ def load_checkpoint_from_hub(
     Download a branch snapshot and read params/opt states/metadata/config.
     """
     try:
-        from huggingface_hub import snapshot_download
-
-        logger.info(f"Loading checkpoint from {repo_id}/{branch_name}...")
+        logger.info("Loading checkpoint from %s/%s...", repo_id, branch_name)
         local_dir = snapshot_download(repo_id=repo_id, revision=branch_name, repo_type="model")
 
         data: Dict[str, Any] = {"local_dir": local_dir}
@@ -368,10 +386,10 @@ def load_checkpoint_from_hub(
             with open(cp, "r", encoding="utf-8") as f:
                 data["config"] = json.load(f)
 
-        logger.info(f"✅ Checkpoint loaded from {repo_id}/{branch_name}")
+        logger.info("✅ Checkpoint loaded from %s/%s", repo_id, branch_name)
         return data
     except Exception as e:
-        logger.error(f"Failed to load checkpoint from hub: {str(e)}")
+        logger.error("Failed to load checkpoint from hub: %s", str(e))
         return None
 
 # ----------------------------
@@ -408,11 +426,11 @@ def cleanup_old_checkpoints(checkpoint_dir: str, keep_n: int = 5):
         for p, _ in files[keep_n:]:
             try:
                 os.remove(p)
-                logger.info(f"Removed old checkpoint: {p}")
+                logger.info("Removed old checkpoint: %s", p)
             except Exception:
                 pass
     except Exception as e:
-        logger.error(f"Failed to cleanup checkpoints: {str(e)}")
+        logger.error("Failed to cleanup checkpoints: %s", str(e))
 
 # ----------------------------
 # Final model export
@@ -441,28 +459,26 @@ def save_final_model(
         tokenizer.save_pretrained(save_dir)
 
     # Model card
-    model_card = f"""---
-language: en
-tags: [structformer, hyperbolic, poincare, language-modeling, babylm]
-license: mit
----
+    model_card = """---
+    language: en
+    tags: [structformer, hyperbolic, poincare, language-modeling, babylm]
+    license: mit
+    ---
 
-# StructFormer + Poincaré Embeddings
+    # StructFormer + Poincaré Embeddings
 
-A model combining StructFormer’s structure induction with Poincaré (hyperbolic) token embeddings.
+    A model combining StructFormer’s structure induction with Poincaré (hyperbolic) token embeddings.
 
-## Training
-- Framework: JAX/Flax
-- Optimization: Dual (AdamW for model, Riemannian for embeddings)
-- Losses: Cross-entropy + Hyperbolic regularizers
+    ## Training
+    - Framework: JAX/Flax
+    - Optimization: Dual (AdamW for model, Riemannian for embeddings)
+    - Losses: Cross-entropy + Hyperbolic regularizers
 
-## Loading
-```python
-from flax.serialization import from_bytes
-with open("model.flax","rb") as f:
-    params = from_bytes(None, f.read())
-# Instantiate your model class with the same config used for training.
-"""
-    with open(os.path.join(save_dir, "README.md"), "w", encoding="utf-8") as f:
-        f.write(model_card)
-    logger.info(f"✅ Final model saved to {save_dir}")
+    ## Loading
+    """
+    model_card += "```python\n"
+    model_card += "from flax.serialization import from_bytes\n"
+    model_card += "with open('model.flax','rb') as f:\n"
+    model_card += "    params = from_bytes(None, f.read())\n"
+    model_card += "# Instantiate your model class with the same config used for training.\n"
+    model_card += "```\n"
