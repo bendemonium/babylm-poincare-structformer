@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Train StructFormer (+ optional Poincaré) on BabyLM-style data.
 
