@@ -312,35 +312,31 @@ def save_checkpoint_branch(
 ):
     """
     Package and upload a checkpoint to a specific Hub branch.
-    Ensures the repo and the branch exist before upload.
     """
-    logger.info("Saving checkpoint to branch %s...", branch_name)
+    logger.info(f"Saving checkpoint to branch {branch_name}...")
+
+    # --- Ensure the target HF model repo exists (inline, no external helper) ---
+    api = HfApi()
+    try:
+        api.repo_info(repo_id, repo_type="model")
+        logger.info(f"Repository {repo_id} already exists")
+    except Exception:
+        logger.info(f"Creating Hugging Face model repo: {repo_id}")
+        create_repo(repo_id=repo_id, private=True, repo_type="model", exist_ok=True)
+        # best-effort ensure main branch (usually auto-created)
+        try:
+            api.create_branch(repo_id, branch="main", repo_type="model")
+        except Exception:
+            pass
+    # --------------------------------------------------------------------------
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # 1) Ensure repo
-        create_huggingface_repo(repo_id, private=True, repo_type="model")
-
-        # ---------------------------
-        # HF AutoClass extras (write first so config/safetensors are present)
-        # ---------------------------
-        # (A) HF config.json (remote code config for AutoClass)
-        write_hf_config_json(config, tmp_dir)
-
-        # (B) flax_model.safetensors (AutoClass expects this)
-        # Convert params pytree to a plain state dict
-        try:
-            state_dict = to_state_dict(params)
-        except Exception:
-            # Fallback: if already a plain dict of arrays
-            state_dict = params
-        save_safetensors(state_dict, os.path.join(tmp_dir, "flax_model.safetensors"))
-
-        # 2) Legacy params archive (keep for debugging / back-compat)
+        # 1) Params
         params_path = os.path.join(tmp_dir, "model_params.flax")
         with open(params_path, "wb") as f:
             f.write(to_bytes(params))
 
-        # 3) Optimizer states (optional)
+        # 2) Opt states
         if opt_state_embed is not None:
             with open(os.path.join(tmp_dir, "opt_state_embed.flax"), "wb") as f:
                 f.write(to_bytes(opt_state_embed))
@@ -348,18 +344,10 @@ def save_checkpoint_branch(
             with open(os.path.join(tmp_dir, "opt_state_other.flax"), "wb") as f:
                 f.write(to_bytes(opt_state_other))
 
-        # 4) (Optional) your rich config snapshot for humans/tools
-        #     (kept as config.json previously; rename to avoid clobbering HF config)
-        #     We'll write it as config_training.json now.
-        try:
-            human_cfg_path = os.path.join(tmp_dir, "config_training.json")
-            cfg_serializable = sanitize(config)
-            with open(human_cfg_path, "w", encoding="utf-8") as f:
-                json.dump(cfg_serializable, f, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
+        # 3) Config
+        write_config(config, tmp_dir, model_file)
 
-        # 5) Metadata (optionally include diagnostics on the embedding table)
+        # 4) Metadata
         metadata = {
             "step": int(step),
             "words_processed": int(words_processed),
@@ -376,9 +364,8 @@ def save_checkpoint_branch(
                 if "embed_table" in params["params"]:
                     embed = params["params"]["embed_table"]
             if embed is not None:
-                curvature = float(getattr(config, "c", 1.0))
                 metadata["hyperbolic_diagnostics"] = make_json_serializable(
-                    hyperbolic_diagnostics(embed, curvature)
+                    hyperbolic_diagnostics(embed, getattr(config, "c", 1.0))
                 )
         except Exception:
             pass
@@ -386,11 +373,11 @@ def save_checkpoint_branch(
         with open(os.path.join(tmp_dir, "training_metadata.json"), "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-        # 6) Modeling files (remote code for AutoClass)
+        # 5) Modeling files
         if include_modeling_files:
             copy_modeling_files(include_modeling_files, tmp_dir)
 
-        # 7) README
+        # 6) README
         readme = f"""# StructFormer + Poincaré Checkpoint
 
 Checkpoint from training StructFormer with Poincaré (hyperbolic) embeddings.
@@ -404,30 +391,28 @@ Checkpoint from training StructFormer with Poincaré (hyperbolic) embeddings.
 - **Timestamp**: {metadata['timestamp']}
 
 ## Files
-- `flax_model.safetensors`  ← loadable with FlaxAutoModelForMaskedLM (trust_remote_code=True)
-- `config.json`             ← HF config for AutoClass
-- `model_params.flax`       ← legacy params dump (debug/back-compat)
-- `opt_state_embed.flax`    (optional)
-- `opt_state_other.flax`    (optional)
+- `model_params.flax`
+- `opt_state_embed.flax` (optional)
+- `opt_state_other.flax` (optional)
+- `config.json`
 - `training_metadata.json`
-- `config_training.json`    ← human/tooling snapshot of your full training cfg
 - modeling code (if included)
 """
         with open(os.path.join(tmp_dir, "README.md"), "w", encoding="utf-8") as f:
             f.write(readme)
 
-        # 8) Upload to the branch
-        logger.info("Uploading to %s@%s ...", repo_id, branch_name)
+        # 7) Upload to the branch (created if missing)
+        logger.info(f"Uploading to {repo_id}@{branch_name} ...")
         upload_folder(
             folder_path=tmp_dir,
             repo_id=repo_id,
             repo_type="model",
-            revision=branch_name,  # now guaranteed to exist
+            revision=branch_name,   # creates the branch if it doesn't exist
             commit_message=f"Checkpoint at {words_processed:,} words (step {step:,})",
             create_pr=False,
         )
 
-    logger.info("✅ Checkpoint saved to %s/%s", repo_id, branch_name)
+    logger.info(f"✅ Checkpoint saved to {repo_id}/{branch_name}")
 
 def load_checkpoint_from_hub(
     repo_id: str,

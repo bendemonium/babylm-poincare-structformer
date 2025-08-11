@@ -74,37 +74,31 @@ def _load_pickle_from_hub(repo_id: str, filename: str):
 
     return data
 
-def _load_datasets(cfg_ns):
-    dtype = getattr(cfg_ns.data, "type", "hf")
-
+def _load_datasets(cfg_ns: Any):
+    """
+    Returns (train, val)
+    - HF mode: returns Dataset objects
+    - pickle mode: returns python lists or dicts as saved in your .pkl
+    """
+    dtype = _get(cfg_ns, "data.type", _get(cfg_ns, "data.dataset_type", "hf"))
     if dtype == "hf":
-        repo_id = cfg_ns.data.hf_repo_id
-        train_split = getattr(cfg_ns.data, "train_split", "train")
-        val_split = getattr(cfg_ns.data, "val_split", "validation")
-
-        def is_slice(s: str) -> bool:
-            # crude but reliable: slices contain ':' or '['
-            return (":" in s) or ("[" in s) or ("]" in s)
-
-        if is_slice(train_split) or is_slice(val_split):
-            # Load each split separately via the `split=` arg
-            train_ds = load_dataset(repo_id, split=train_split)
-            val_ds = load_dataset(repo_id, split=val_split)
-            return train_ds, val_ds
-        else:
-            # Normal DatasetDict lookup
-            ds = load_dataset(repo_id)
-            return ds[train_split], ds[val_split]
-
+        hf_repo = _get(cfg_ns, "data.hf_repo_id")
+        if not hf_repo:
+            raise ValueError("In HF mode, data.hf_repo_id must be set.")
+        ds = load_dataset(hf_repo)
+        train_split = _get(cfg_ns, "data.train_split", "train")
+        val_split = _get(cfg_ns, "data.val_split", "validation")
+        return ds[train_split], ds[val_split]
     elif dtype == "pickle":
-        tr_repo = cfg_ns.data.train_tokenized_repo
-        tr_file = cfg_ns.data.train_tokenized_file
-        va_repo = cfg_ns.data.val_tokenized_repo
-        va_file = cfg_ns.data.val_tokenized_file
+        tr_repo = _get(cfg_ns, "data.train_tokenized_repo")
+        tr_file = _get(cfg_ns, "data.train_tokenized_file")
+        va_repo = _get(cfg_ns, "data.val_tokenized_repo")
+        va_file = _get(cfg_ns, "data.val_tokenized_file")
         if not all([tr_repo, tr_file, va_repo, va_file]):
             raise ValueError("pickle mode requires train/val *_repo and *_file in config.data")
-        return _load_pickle_from_hub(tr_repo, tr_file), _load_pickle_from_hub(va_repo, va_file)
-
+        train_obj = _load_pickle_from_hub(tr_repo, tr_file)
+        val_obj = _load_pickle_from_hub(va_repo, va_file)
+        return train_obj, val_obj
     else:
         raise ValueError(f"Unknown data.type: {dtype}")
 

@@ -1,4 +1,4 @@
-# models/modeling_structformer_poincare_flax.py
+
 from typing import Optional, Tuple
 import jax
 import jax.numpy as jnp
@@ -7,7 +7,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers.modeling_flax_utils import (
     FlaxPreTrainedModel,
 )
-from transformers import FlaxMaskedLMOutput
+from transformers.modeling_flax_outputs import FlaxMaskedLMOutput
 from .configuration_structformer_poincare import StructformerPoincareConfig
 from .structformer_poincare import StructformerPoincare as _InnerModel  # your existing module
 

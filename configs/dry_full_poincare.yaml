@@ -30,8 +30,8 @@ data:
   type: hf
   hf_repo_id: bendemonium/babylm25_bpe_tokens
   repo_type: dataset
-  train_split: train[:0.2%]
-  val_split: dev[:0.2%]
+  train_split: train[:1%]
+  val_split: dev[:1%]
 
 # ---- Checkpointing ----
 checkpointing:

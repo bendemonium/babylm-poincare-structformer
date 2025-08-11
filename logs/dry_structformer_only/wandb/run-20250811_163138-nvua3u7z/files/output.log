@@ -1,0 +1,53 @@
+16:31:39 |     INFO | utils.logging_utils | ✅ W&B initialized: structformer-flax/dry-structformer-only
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.4; python/3.10.12; torch/2.8.0; huggingface_hub/0.34.4; pyarrow/21.0.0; jax/0.6.2' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/README.md
+Request f0989de1-8f58-4133-9d98-fe02082b44ba: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/main/README.md (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.4; python/3.10.12; torch/2.8.0; huggingface_hub/0.34.4; pyarrow/21.0.0; jax/0.6.2' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/babylm25_bpe_tokens.py
+Request 01ecb590-018e-44f6-949d-b330bebca781: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/babylm25_bpe_tokens.py (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'User-Agent: datasets/4.0.0; python/3.10.12; huggingface_hub/0.34.4; pyarrow/21.0.0; torch/2.8.0; jax/0.6.2' https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/bendemonium/babylm25_bpe_tokens/bendemonium/babylm25_bpe_tokens.py
+Request e0638494-0f7a-4aca-865e-895c3b6ca3c2: HEAD https://s3.amazonaws.com/datasets.huggingface.co/datasets/datasets/bendemonium/babylm25_bpe_tokens/bendemonium/babylm25_bpe_tokens.py (authenticated: False)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Request 5f8ebfd6-008e-44db-83f7-69c51a0b4fcb: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.4; python/3.10.12; torch/2.8.0; huggingface_hub/0.34.4; pyarrow/21.0.0; jax/0.6.2' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/.huggingface.yaml
+Request 2047f1e6-1e76-4bdb-bda4-9dd021d146b2: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/.huggingface.yaml (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' 'https://datasets-server.huggingface.co/info?dataset=bendemonium/babylm25_bpe_tokens'
+Request 792b5b0d-901c-40d1-8a8b-316b88d0eba1: GET https://datasets-server.huggingface.co/info?dataset=bendemonium/babylm25_bpe_tokens (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Request 69e3a75a-c4d6-4250-a5b1-1aff274637de: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' 'https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d?recursive=False&expand=False'
+Request d05fda32-e9f8-4ce8-8a5a-e9ebea977969: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d?recursive=False&expand=False (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' 'https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d/data?recursive=False&expand=False'
+Request 501fd991-1a2b-4ded-ab38-efa40ca50f88: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/tree/e6c2e9185c75c14f37b167b35b73264fc663158d/data?recursive=False&expand=False (authenticated: True)
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Send: curl -X GET -H 'Accept: */*' -H 'Accept-Encoding: gzip, deflate' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d
+Request f015c48d-2cd9-45ef-b25e-d2340a572f5c: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Request bd2d6029-2ffd-4f73-af97-48b08422b651: GET https://huggingface.co/api/datasets/bendemonium/babylm25_bpe_tokens/revision/e6c2e9185c75c14f37b167b35b73264fc663158d (authenticated: True)
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: datasets/4.0.0; hf_hub/0.34.4; python/3.10.12; torch/2.8.0; huggingface_hub/0.34.4; pyarrow/21.0.0; jax/0.6.2' https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/dataset_infos.json
+Request abc9b501-0968-4bfb-a378-a8c7d095d374: HEAD https://huggingface.co/datasets/bendemonium/babylm25_bpe_tokens/resolve/e6c2e9185c75c14f37b167b35b73264fc663158d/dataset_infos.json (authenticated: True)
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 274, in <module>
+    main()
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 246, in main
+    train_ds, val_ds = _load_datasets(cfg)
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 91, in _load_datasets
+    train_ds = load_dataset(repo_id, split=train_split)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/load.py", line 1424, in load_dataset
+    ds = builder_instance.as_dataset(split=split, verification_mode=verification_mode, in_memory=keep_in_memory)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/builder.py", line 1087, in as_dataset
+    datasets = map_nested(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/utils/py_utils.py", line 493, in map_nested
+    mapped = function(data_struct)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/builder.py", line 1117, in _build_single_dataset
+    ds = self._as_dataset(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/builder.py", line 1191, in _as_dataset
+    dataset_kwargs = ArrowReader(cache_dir, self.info).read(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/arrow_reader.py", line 248, in read
+    files = self.get_file_instructions(name, instructions, split_infos)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/arrow_reader.py", line 221, in get_file_instructions
+    file_instructions = make_file_instructions(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/arrow_reader.py", line 128, in make_file_instructions
+    instruction = ReadInstruction.from_spec(instruction)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/arrow_reader.py", line 564, in from_spec
+    instruction = _str_to_read_instruction(subs[0])
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/datasets/arrow_reader.py", line 401, in _str_to_read_instruction
+    raise ValueError(f"Unrecognized instruction format: {spec}")
+ValueError: Unrecognized instruction format: train[:0.2%]
