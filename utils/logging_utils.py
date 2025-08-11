@@ -149,6 +149,31 @@ def setup_wandb(config: LoggingConfig, model_config: Any = None) -> bool:
     except Exception as e:
         logger.error("Failed to initialize W&B: %s", str(e))
         return False
+# ---------------------------------------------------------------------------
+# Simple metric logger used in tests
+# ---------------------------------------------------------------------------
+class MetricLogger:
+    """Minimal metric logger writing to stdout and an optional log file."""
+
+    def __init__(self, log_dir: Optional[str] = None):
+        self.log_dir = log_dir
+        self.logger = logging.getLogger("metric_logger")
+        self.file = None
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+            self.file = open(os.path.join(log_dir, "metrics.log"), "a", encoding="utf-8")
+
+    def log_metrics(self, metrics: Dict[str, Any], step: int, prefix: str = "") -> None:
+        msg = ", ".join(f"{k}={float(v):.4f}" for k, v in metrics.items())
+        self.logger.info("%s step %d: %s", prefix, step, msg)
+        if self.file:
+            self.file.write(f"{prefix} step {step}: {msg}\n")
+            self.file.flush()
+
+    def close(self) -> None:
+        if self.file:
+            self.file.close()
+
 
 # ----------------------------
 # Metrics tracking

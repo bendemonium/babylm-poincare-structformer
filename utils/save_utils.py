@@ -54,6 +54,10 @@ def make_json_serializable(obj):
         return obj
     return str(obj)
 
+def sanitize(obj: Any) -> Any:
+    """Sanitize objects (e.g. JAX arrays) for JSON serialization."""
+    return make_json_serializable(obj)
+
 # ----------------------------
 # Config & metadata
 # ----------------------------

@@ -17,36 +17,50 @@ import jax
 import jax.numpy as jnp
 from jax import random
 from flax.training import train_state
+from flax import struct
 import optax
 
 from models.hyperbolic_geometry import (
     riemannian_gradient_conversion, poincare_proj, hyperbolic_diagnostics,
     poincare_distance_capped
 )
-from .logging_utils import TrainingLogger
-from .save_utils import save_checkpoint_branch
-from .retrieve_utils import create_data_iterator
+from utils.logging_utils import TrainingLogger
+from utils.save_utils import save_checkpoint_branch
+from utils.retrieve_utils import create_data_iterator
 
 logger = logging.getLogger(__name__)
+_BATCH_STATS: Dict[str, Any] = {
 
 # ----------------------------
 # Training State Management
 # ----------------------------
+@struct.dataclass
 class DualTrainState:
     """Two TrainStates: one for embeddings, one for other params."""
-    def __init__(self, embed_state: train_state.TrainState, other_state: train_state.TrainState):
-        self.embed_state = embed_state
-        self.other_state = other_state
+    embed_state: train_state.TrainState
+    other_state: train_state.TrainState
 
     def get_merged_params(self) -> Dict[str, Any]:
         # embed_state.params is {'embed_table': ...}
         return {**self.other_state.params, **self.embed_state.params}
 
-    def apply_gradients(self, embed_grads: Dict[str, Any], other_grads: Dict[str, Any]) -> 'DualTrainState':
+    def apply_gradients(self, embed_grads: Dict[str, Any], other_grads: Dict[str, Any]) -> "DualTrainState":
         new_embed_state = self.embed_state.apply_gradients(grads=embed_grads)
         new_other_state = self.other_state.apply_gradients(grads=other_grads)
         return DualTrainState(new_embed_state, new_other_state)
 
+@struct.dataclass
+class _TrainingCfg:
+    lr_ce: float = 1e-3
+    lr_riem: float = 1e-3
+    lambda_h: float = 0.05
+    lambda_tree: float = 0.05
+
+
+@struct.dataclass
+class _Config:
+    c: float = 1.0
+    training: _TrainingCfg = struct.field(default_factory=_TrainingCfg)
 
 def create_dual_train_states(
     model,
@@ -81,6 +95,171 @@ def create_dual_train_states(
     logger.info("   Embedding params: %s", f"{sum(p.size for p in jax.tree_util.tree_leaves(embed_params)):,}")
     logger.info("   Other params: %s", f"{sum(p.size for p in jax.tree_util.tree_leaves(other_params)):,}")
     return DualTrainState(embed_state, other_state)
+
+# -----------------------------------------------------------------------------
+# Convenience wrappers used in tests and simple scripts
+# -----------------------------------------------------------------------------
+def create_train_states(
+    rng: jax.random.PRNGKey,
+    model,
+    vocab_size: int,
+    seq_len: int,
+    lr_ce: float = 1e-3,
+    lr_riem: float = 1e-3,
+    c: float = 1.0,
+):
+    """Initialize model parameters and optimizers for tests."""
+    global _BATCH_STATS
+    sample = {
+        "input_ids": jnp.zeros((1, seq_len), dtype=jnp.int32),
+        "attention_mask": jnp.ones((1, seq_len), dtype=jnp.bool_),
+    }
+    variables = model.init(rng, **sample, training=False)
+    _BATCH_STATS = variables.get("batch_stats", {})
+    params = variables["params"]
+
+    embed_params = {"embed_table": params["embed_table"]}
+    other_params = {k: v for k, v in params.items() if k != "embed_table"}
+
+    embed_optimizer = optax.adamw(lr_riem)
+    other_optimizer = optax.adamw(lr_ce)
+
+    state_embed = train_state.TrainState.create(apply_fn=model.apply, params=embed_params, tx=embed_optimizer)
+    state_other = train_state.TrainState.create(apply_fn=model.apply, params=other_params, tx=other_optimizer)
+
+    safe_embed = poincare_proj(embed_params["embed_table"], c, eps_margin=1e-4)
+    state_embed = state_embed.replace(params={"embed_table": safe_embed})
+
+    return state_embed, state_other
+
+
+def train_step(
+    state_embed,
+    state_other,
+    batch: Dict[str, jnp.ndarray],
+    c: float,
+    lambda_poincare: float,
+    model,
+):
+    """Single training step returning updated states and metrics."""
+    params = {**state_other.params, **state_embed.params}
+
+    def loss_fn(p):
+        variables = {"params": p, "batch_stats": _BATCH_STATS}
+        outs, new_bs = model.apply(
+            variables,
+            batch["input_ids"],
+            batch.get("attention_mask"),
+            training=False,
+            mutable=["batch_stats"],
+        )
+        ce = compute_ce_loss(outs["logits"], batch["input_ids"], batch.get("attention_mask"))
+        hyp = compute_local_hyperbolic_loss(outs["hyperbolic_embeds"], c)
+        total = ce + lambda_poincare * hyp
+        metrics = {"ce_loss": ce, "poincare_loss": hyp, "total_loss": total}
+        return total, (metrics, new_bs["batch_stats"])
+
+    (loss, (metrics, new_batch_stats)), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
+    global _BATCH_STATS
+    _BATCH_STATS = new_batch_stats
+
+    embed_grads = {"embed_table": grads.get("embed_table", jnp.zeros_like(state_embed.params["embed_table"]))}
+    other_grads = {k: v for k, v in grads.items() if k != "embed_table"}
+
+    new_state_embed = state_embed.apply_gradients(grads=embed_grads)
+    new_state_other = state_other.apply_gradients(grads=other_grads)
+
+    safe_embed = poincare_proj(new_state_embed.params["embed_table"], c, eps_margin=1e-4)
+    new_state_embed = new_state_embed.replace(params={"embed_table": safe_embed})
+
+    return new_state_embed, new_state_other, metrics
+
+
+def eval_step(
+    state_embed,
+    state_other,
+    batch: Dict[str, jnp.ndarray],
+    c: float,
+    lambda_poincare: float,
+    model,
+):
+    """Evaluation step wrapper matching the test harness signature."""
+    dual = DualTrainState(state_embed, state_other)
+    variables = {"params": dual.get_merged_params(), "batch_stats": _BATCH_STATS}
+    outs = model.apply(variables, batch["input_ids"], batch.get("attention_mask"), training=False)
+    ce_loss = compute_ce_loss(outs["logits"], batch["input_ids"], batch.get("attention_mask"))
+    poincare_loss = compute_local_hyperbolic_loss(outs["hyperbolic_embeds"], c)
+    perplexity = jnp.exp(ce_loss)
+    return {
+        "eval_ce_loss": ce_loss,
+        "eval_poincare_loss": poincare_loss,
+        "eval_perplexity": perplexity,
+        "eval_total_loss": ce_loss + poincare_loss,
+    }
+
+
+def eval_epoch(
+    state_embed,
+    state_other,
+    val_data,
+    batch_size: int,
+    c: float,
+    lambda_poincare: float,
+    model,
+    dataset_type: str = "hf",
+    max_batches: Optional[int] = None,
+):
+    """Evaluate over an entire epoch (or a limited number of batches)."""
+    dual = DualTrainState(state_embed, state_other)
+    config = _Config(c=c)
+
+    total = {"eval_ce_loss": 0.0, "eval_poincare_loss": 0.0, "eval_total_loss": 0.0}
+    count = 0
+
+    if dataset_type == "hf":
+        length = len(val_data)
+        for start in range(0, length, batch_size):
+            if max_batches is not None and count >= max_batches:
+                break
+            batch_slice = val_data[start : start + batch_size]
+            batch = {
+                "input_ids": jnp.array(batch_slice["input_ids"]),
+                "attention_mask": jnp.array(batch_slice["attention_mask"]),
+            }
+            metrics = eval_step(state_embed, state_other, batch, c, lambda_poincare, model)
+            for k in total:
+                total[k] += float(metrics[k])
+            count += 1
+    else:
+        batch = []
+        for example in val_data:
+            batch.append(example)
+            if len(batch) == batch_size:
+                if max_batches is not None and count >= max_batches:
+                    break
+                batch_arr = {
+                    "input_ids": jnp.array([ex["input_ids"] for ex in batch]),
+                    "attention_mask": jnp.array([ex["attention_mask"] for ex in batch]),
+                }
+                metrics = eval_step(state_embed, state_other, batch_arr, c, lambda_poincare, model)
+                for k in total:
+                    total[k] += float(metrics[k])
+                count += 1
+                batch = []
+        if batch and (max_batches is None or count < max_batches):
+            batch_arr = {
+                "input_ids": jnp.array([ex["input_ids"] for ex in batch]),
+                "attention_mask": jnp.array([ex["attention_mask"] for ex in batch]),
+            }
+            metrics = eval_step(state_embed, state_other, batch_arr, c, lambda_poincare, model)
+            for k in total:
+                total[k] += float(metrics[k])
+            count += 1
+
+    for k in total:
+        total[k] = total[k] / max(count, 1)
+    return total
+
 
 # ----------------------------
 # Losses
@@ -155,8 +334,12 @@ def train_step_single_pass(
 
     def fwd(params, inputs, attn_mask, mutable_stats):
         outs, new_mut = model.apply(
-            {'params': params, 'batch_stats': mutable_stats},
-            inputs, attn_mask, training=True, mutable=['batch_stats']
+            {"params": params, "batch_stats": mutable_stats},
+            inputs,
+            attn_mask,
+            training=True,
+            mutable=["batch_stats"],
+            rngs={"dropout": jax.random.PRNGKey(0)},
         )
         return (outs['logits'], outs['hyperbolic_embeds']), new_mut
 
@@ -235,13 +418,13 @@ def train_step_single_pass(
 # ----------------------------
 # Eval
 # ----------------------------
-@partial(jax.jit, static_argnames=('model', 'config'))
-def eval_step(
+@partial(jax.jit, static_argnames=("model", "config"))
+def _eval_step_internal(
     dual_state: DualTrainState,
     batch: Dict[str, jnp.ndarray],
     model,
     config,
-    batch_stats: Optional[Dict[str, Any]] = None
+    batch_stats: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, jnp.ndarray]:
     """Eval: one forward, CE + local hyperbolic metrics (no grads)."""
     if batch_stats is None:
@@ -251,7 +434,7 @@ def eval_step(
         {'params': merged_params, 'batch_stats': batch_stats},
         batch['input_ids'],
         batch.get('attention_mask'),
-        training=False
+        training=False,
     )
     ce_loss = compute_ce_loss(outs['logits'], batch['input_ids'], batch.get('attention_mask'))
     poincare_loss = compute_local_hyperbolic_loss(outs['hyperbolic_embeds'], config.c)
