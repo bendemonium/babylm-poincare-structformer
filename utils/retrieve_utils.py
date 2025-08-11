@@ -284,14 +284,14 @@ def create_data_iterator(
         data = dataset
     
     batch = []
-    for example in 
+    for example in data:
         # Ensure example has required format
         if isinstance(example, dict) and 'input_ids' in example:
             batch.append(example)
         else:
             # Try to convert if it's raw token list
             batch.append({'input_ids': example})
-            
+
         if len(batch) == batch_size:
             yield prepare_batch_data(batch, max_length, pad_token_id)
             batch = []
