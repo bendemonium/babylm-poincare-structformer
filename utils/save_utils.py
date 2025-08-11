@@ -297,6 +297,22 @@ def copy_modeling_files(source_files: List[str], target_dir: str):
         shutil.copy2(src, dst)
         logger.info("Copied %s → %s", src, dst)
 
+from huggingface_hub import HfApi, create_repo, upload_folder
+
+def _ensure_model_repo_and_branch(repo_id: str, branch_name: str, private: bool = True):
+    api = HfApi()
+    # ensure repo exists
+    try:
+        api.repo_info(repo_id=repo_id, repo_type="model")
+    except Exception:
+        create_repo(repo_id=repo_id, repo_type="model", private=private, exist_ok=True)
+    # ensure branch exists
+    try:
+        api.create_branch(repo_id=repo_id, branch=branch_name, repo_type="model")
+    except Exception:
+        # branch probably already exists; ignore
+        pass
+
 def save_checkpoint_branch(
     params: Dict,
     config: Any,
@@ -401,18 +417,20 @@ Checkpoint from training StructFormer with Poincaré (hyperbolic) embeddings.
         with open(os.path.join(tmp_dir, "README.md"), "w", encoding="utf-8") as f:
             f.write(readme)
 
-        # 7) Upload to the branch (created if missing)
-        logger.info(f"Uploading to {repo_id}@{branch_name} ...")
-        upload_folder(
-            folder_path=tmp_dir,
-            repo_id=repo_id,
-            repo_type="model",
-            revision=branch_name,   # creates the branch if it doesn't exist
-            commit_message=f"Checkpoint at {words_processed:,} words (step {step:,})",
-            create_pr=False,
-        )
+            # 7) Upload to the branch (created if missing)
+            logger.info(f"[HF upload] repo={repo_id} branch={branch_name}")
+            _ensure_model_repo_and_branch(repo_id, branch_name, private=True)
 
-    logger.info(f"✅ Checkpoint saved to {repo_id}/{branch_name}")
+            # final upload
+            upload_folder(
+                folder_path=tmp_dir,
+                repo_id=repo_id,
+                repo_type="model",
+                revision=branch_name,  # safe now that we ensured it exists
+                commit_message=f"Checkpoint at {words_processed:,} words (step {step:,})",
+                create_pr=False,
+            )
+            logger.info(f"✅ Checkpoint saved to {repo_id}/{branch_name}")
 
 def load_checkpoint_from_hub(
     repo_id: str,
