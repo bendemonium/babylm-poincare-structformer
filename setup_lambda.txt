@@ -21,11 +21,9 @@ pip uninstall numpy -y
 pip install "numpy<2.0"
 
 pip install -r requirements.txt
-# git clone https://github.com/bendemonium/babylm-poincare-structformer.git
+git clone https://github.com/bendemonium/babylm-poincare-structformer.git
 
 export PYTHONPATH=/home/ubuntu/babylm-poincare-structformer
-
-huggingface-cli login
 
 git config --global user.name "bendemonium"
 git config --global user.email "ridhib2422@gmail.com"
@@ -35,6 +33,7 @@ git remote -v
 
 git add .
 
+huggingface-cli login
 
 ----- CHECKK CuDNN VERSION -----#
 
@@ -56,6 +55,6 @@ export $(grep -v '^#' .env | xargs)
 TRAINNNNN
 
 python utils/test_utils.py  # Catches issues before long training
-python train.py --config base.yaml --dry-run  # Test with 1M words
-python train.py --config base.yaml
+python scripts/train.py --config configs/base.yaml --dry-run  # Test with 1M words
+python scripts/train.py --config configs/base.yaml
 

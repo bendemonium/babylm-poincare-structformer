@@ -1,65 +1,67 @@
-# base.yaml - Configuration for StructformerPoincare Training
+seed: 42
 
-# Dataset and tokenizer settings
+# ---- Model ----
+vocab_name: gpt2            
+max_length: 128             
+hidden_dim: 256
+num_layers: 6
+num_heads: 8
+dropout_rate: 0.1
+c: 1.0                      # Poincare curvature (>0)
+pad_id: null                # null because I want it to infer from the tokenizer
 
-dataset_type: "pickle"  # Using pickle files from HF repos
-train_tokenized_repo: bendemonium/babylm25_bpe_tokens
-train_tokenized_file: train_tokenized.pkl
-val_tokenized_repo: bendemonium/babylm25_bpe_tokens
-val_tokenized_file: dev_tokenized.pkl
-vocab_name: gpt2  # Tokenizer for vocab_size extraction
-
-# Model architecture hyperparameters
-model:
-  vocab_size: 50257  # GPT-2 tokenizer vocab size
-  hidden_dim: 256
-  num_heads: 8
-  num_layers: 4
-  max_length: 128  # renamed from seq_length for consistency
-  c: 1.0  # Hyperbolic geometry curvature parameter
-
-# Training hyperparameters
+# ---- Training ----
 training:
-  # Dual learning rates for dual-optimizer setup
-  lr_ce: 0.0001      # Learning rate for cross-entropy loss (non-embedding params)
-  lr_riem: 0.0001    # Learning rate for Riemannian/Poincaré loss (embedding params)
-  lambda_poincare: 0.1  # Weight for combining Poincaré distance loss
-  
+  max_words: 100_000_000    # stop after this many "words" (words = 0.75 * non-pad tokens)
   batch_size: 128
-  eval_batch_size: 64  # Separate eval batch size
-  num_epochs: 5
-  
-  # Batch limits per epoch (useful for development/testing)
-  train_max_batches: null  # null = use full dataset
-  eval_max_batches: 100    # limit eval batches for faster validation
-  
-  save_interval: 1  # Save checkpoint every N epochs
-  eval_interval: 1  # Run validation every N epochs
+  eval_batch_size: 128
+  eval_interval_words: 1_000_000  # run eval roughly every 1M words
+  num_epochs: 4
+  lr_ce: 2.0e-4             # non-embedding (Euclidean) params – AdamW
+  lr_riem: 1.0e-4           # embedding table – AdamW + Riemannian conversion
+  lambda_h: 0.05            # weight for local hyperbolic (adjacent) loss
+  lambda_tree: 0.05         # weight for tree regularizer (if used)
+  tau: 1.0                  # scale for tree distances (if used)
 
-# Logging and experiment tracking
+# ---- Data ----
+data:
+  type: pickle                # hf or pickle
+  hf_repo_id: bendemonium/babylm25-bpe-tokens
+  train_split: train
+  val_split: dev 
+  # pickle
+  train_tokenized_repo: bendemonium/babylm25-bpe-tokens
+  train_tokenized_file: train_tokeinzed.pkl
+  val_tokenized_repo: bendemonium/babylm25-bpe-tokens
+  val_tokenized_file: dev_tokenized.pkl
+
+# ---- Checkpointing ----
+checkpointing:
+  output_repo_id: bendemonium/babylm-structformer-poincare # HF Hub model repo to push to
+  branch_prefix: checkpoint
+  include_modeling_files:
+    - models/structformer_poincare.py
+    - models/hyperbolic_geometry.py
+    - utils/train_utils.py
+    - utils/logging_utils.py
+    - utils/save_utils.py
+  model_file: models/structformer_poincare.py
+  use_word_milestones: true   # for metadata purposes
+  max_words: 100_000_000      # mirrored for save metadata
+
+# ---- Logging ----
 logging:
-  log_dir: "logs/structformer_run"
+  log_dir: logs/structformer_run
   use_wandb: true
   wandb_project: structformer-flax
-  wandb_run_name: run-001
-
-# Checkpoint & Export Configuration
-checkpointing:
-  output_repo_id: "bendemonium/babylm-poincare-structformer" 
-  branch_prefix: "checkpoint"
-  include_modeling_files:
-    - "models/hyperbolic_layers.py"
-  model_file: "models/structformer_poincare.py"
-
-# System Configuration
-system:
-  seed: 42
-  jax_device: "gpu"
-  precision: "float32"
-
-# Testing Configuration (for test_utils.py)
-testing:
-  test_batch_size: 2
-  test_seq_len: 8
-  test_vocab_size: 100
-  test_iterations: 50
+  wandb_run_name: run-babylm-poincare
+  console_log_level: INFO
+  file_log_level: DEBUG
+  log_interval_steps: 900
+  log_interval_words: 500000
+  eval_log_interval: 1_000
+  progress_bar: true
+  words_per_second_window: 1000
+  loss_spike_threshold: 2.0
+  nan_alert: true
+  memory_alert_threshold_gb: 8.0
