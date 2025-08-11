@@ -1,5 +1,5 @@
 """
-Train StructFormer (+ optional Poincaré) on BabyLM-style data.
+Train StructFormer (+ optional Poincare) on BabyLM-style data.
 
 Dry-run flags:
   --dry_run_structformer_only        -> training.mode = "structformer_only"
@@ -121,7 +121,7 @@ def main():
     parser.add_argument("--dry_run_structformer_only", action="store_true",
                         help="Ablation: StructFormer only (Euclidean), skip Poincaré losses/updates")
     parser.add_argument("--dry_run_structformer_poincare", action="store_true",
-                        help="Ablation: StructFormer + Poincaré (full pipeline) but short run")
+                        help="Ablation: StructFormer + Poincare (full pipeline) but short run")
     args = parser.parse_args()
 
     # Load config

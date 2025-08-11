@@ -1,5 +1,5 @@
 """
-Save utilities for StructFormer + Poincaré training
+Save utilities for StructFormer + Poincare training
 Handles checkpointing, HuggingFace Hub uploads, and model serialization
 """
 
@@ -16,6 +16,8 @@ import jax.numpy as jnp
 from flax.training import checkpoints
 from flax.serialization import to_bytes, from_bytes
 from huggingface_hub import HfApi, create_repo, upload_folder
+from safetensors.flax import save_file as save_safetensors
+from transformers import PretrainedConfig
 
 from models.hyperbolic_geometry import hyperbolic_diagnostics
 
@@ -204,6 +206,35 @@ def create_huggingface_repo(repo_id: str, private: bool = True, repo_type: str =
             pass
     logger.info(f"✅ Created HuggingFace repository: {repo_id}")
 
+def build_hf_config_dict(cfg) -> dict:
+    # cfg is your SimpleNamespace-like config (top-level)
+    training = getattr(cfg, "training", None)
+
+    return {
+        "model_type": "structformer_poincare",
+        "architectures": ["FlaxStructformerPoincareForMaskedLM"],
+        "vocab_size": getattr(cfg, "vocab_size", None),  # if you want to set it; else tokenizer will define it
+        "hidden_dim": int(getattr(cfg, "hidden_dim", 256)),
+        "num_layers": int(getattr(cfg, "num_layers", 8)),
+        "num_heads": int(getattr(cfg, "num_heads", 8)),
+        "max_length": int(getattr(cfg, "max_length", 128)),
+        "dropout_rate": float(getattr(cfg, "dropout_rate", 0.1)),
+        "c": float(getattr(cfg, "c", 1.0)),
+        "attention_input": getattr(cfg, "attention_input", "tangent"),
+        "pad_token_id": getattr(cfg, "pad_id", 50256),
+        # standard fields HF likes
+        "task_specific_params": {"masked-language-modeling": {}},
+        "torch_dtype": "float32",   # harmless placeholder
+    }
+
+def write_hf_config_json(cfg, save_dir: str):
+    os.makedirs(save_dir, exist_ok=True)
+    cfg_dict = build_hf_config_dict(cfg)
+    path = os.path.join(save_dir, "config.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cfg_dict, f, indent=2, ensure_ascii=False)
+    logger.info(f"✅ HF config.json written to {path}")
+
 def copy_modeling_files(source_files: List[str], target_dir: str):
     """
     Copy selected modeling files into upload folder.
@@ -240,7 +271,22 @@ def save_checkpoint_branch(
         # 1) Ensure repo
         create_huggingface_repo(repo_id, private=True, repo_type="model")
 
-        # 2) Params
+        # ---------------------------
+        # HF AutoClass extras (write first so config/safetensors are present)
+        # ---------------------------
+        # (A) HF config.json (remote code config for AutoClass)
+        write_hf_config_json(config, tmp_dir)
+
+        # (B) flax_model.safetensors (AutoClass expects this)
+        # Convert params pytree to a plain state dict
+        try:
+            state_dict = to_state_dict(params)
+        except Exception:
+            # Fallback: if already a plain dict of arrays
+            state_dict = params
+        save_safetensors(state_dict, os.path.join(tmp_dir, "flax_model.safetensors"))
+
+        # 2) Legacy params archive (keep for debugging / back-compat)
         params_path = os.path.join(tmp_dir, "model_params.flax")
         with open(params_path, "wb") as f:
             f.write(to_bytes(params))
@@ -253,8 +299,16 @@ def save_checkpoint_branch(
             with open(os.path.join(tmp_dir, "opt_state_other.flax"), "wb") as f:
                 f.write(to_bytes(opt_state_other))
 
-        # 4) Config
-        write_config(config, tmp_dir, model_file)
+        # 4) (Optional) your rich config snapshot for humans/tools
+        #     (kept as config.json previously; rename to avoid clobbering HF config)
+        #     We'll write it as config_training.json now.
+        try:
+            human_cfg_path = os.path.join(tmp_dir, "config_training.json")
+            cfg_serializable = sanitize(config)
+            with open(human_cfg_path, "w", encoding="utf-8") as f:
+                json.dump(cfg_serializable, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
 
         # 5) Metadata (optionally include diagnostics on the *embedding table*)
         metadata = {
@@ -266,9 +320,7 @@ def save_checkpoint_branch(
             "timestamp": _now_iso(),
         }
         try:
-            # If params contain the embedding table, log geometry stats
             embed = None
-            # Common Flax param structure: params['embed_table'] or params['params']['embed_table']
             if isinstance(params, dict) and "embed_table" in params:
                 embed = params["embed_table"]
             elif isinstance(params, dict) and "params" in params and isinstance(params["params"], dict):
@@ -284,7 +336,7 @@ def save_checkpoint_branch(
         with open(os.path.join(tmp_dir, "training_metadata.json"), "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-        # 6) Modeling files
+        # 6) Modeling files (remote code for AutoClass)
         if include_modeling_files:
             copy_modeling_files(include_modeling_files, tmp_dir)
 
@@ -302,11 +354,13 @@ Checkpoint from training StructFormer with Poincaré (hyperbolic) embeddings.
 - **Timestamp**: {metadata['timestamp']}
 
 ## Files
-- `model_params.flax`
-- `opt_state_embed.flax` (optional)
-- `opt_state_other.flax` (optional)
-- `config.json`
+- `flax_model.safetensors`  ← loadable with FlaxAutoModelForMaskedLM (trust_remote_code=True)
+- `config.json`             ← HF config for AutoClass
+- `model_params.flax`       ← legacy params dump (debug/back-compat)
+- `opt_state_embed.flax`    (optional)
+- `opt_state_other.flax`    (optional)
 - `training_metadata.json`
+- `config_training.json`    ← human/tooling snapshot of your full training cfg
 - modeling code (if included)
 """
         with open(os.path.join(tmp_dir, "README.md"), "w", encoding="utf-8") as f:

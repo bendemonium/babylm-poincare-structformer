@@ -2,10 +2,10 @@ seed: 42
 
 # ---- Model ----
 vocab_name: gpt2
-max_length: 128
-hidden_dim: 256
-num_layers: 8
-num_heads: 8
+max_length: 64
+hidden_dim: 64
+num_layers: 2
+num_heads: 4
 dropout_rate: 0.1
 c: 1.0
 pad_id: null
@@ -13,34 +13,30 @@ attention_input: tangent
 
 # ---- Training ----
 training:
-  num_epochs: 4
-  max_words: 100000000            # metadata + for logging
-  batch_size: 128
-  eval_batch_size: 128
-  eval_interval_words: 1000000    # run eval ~every 1M words
+  num_epochs: 1
+  max_words: 2000000              # short run for dry run
+  batch_size: 64
+  eval_batch_size: 64
+  eval_interval_words: 25000     # tighter eval for fast feedback
   lr_ce: 2.0e-4
   lr_riem: 1.0e-4
-  lambda_h: 0.05
-  lambda_tree: 0.05
+  lambda_h: 0.0                   # no hyperbolic loss
+  lambda_tree: 0.0
   tau: 1.0
-  mode: structformer_poincare     # options: structformer_only / structformer_poincare
+  mode: structformer_only         # <— Euclidean only (ablation)
 
 # ---- Data ----
 data:
-  type: pickle                    # "hf" or "pickle"
+  type: hf
   hf_repo_id: bendemonium/babylm25_bpe_tokens
   repo_type: dataset
-  train_split: train
-  val_split: dev
-  train_tokenized_repo: bendemonium/babylm25_bpe_tokens
-  train_tokenized_file: train_tokenized.pkl
-  val_tokenized_repo: bendemonium/babylm25_bpe_tokens
-  val_tokenized_file: dev_tokenized.pkl
+  train_split: train[:0.2%]
+  val_split: dev[:0.2%]
 
 # ---- Checkpointing ----
 checkpointing:
   output_repo_id: bendemonium/babylm-structformer-poincare
-  branch_prefix: checkpoint
+  branch_prefix: checkpoint_structonly_dry
   include_modeling_files:
     - models/structformer_poincare.py
     - models/hyperbolic_geometry.py
@@ -49,19 +45,18 @@ checkpointing:
     - utils/save_utils.py
   model_file: models/structformer_poincare.py
   use_word_milestones: true
-  max_words: 100000000
+  max_words: 2000000
 
 # ---- Logging ----
 logging:
-  log_dir: logs/structformer_run
+  log_dir: logs/dry_structformer_only
   use_wandb: true
   wandb_project: structformer-flax
-  wandb_run_name: run-babylm-poincare
+  wandb_run_name: dry-structformer-only
   console_log_level: INFO
   file_log_level: DEBUG
-  log_interval_steps: 900
-  log_interval_words: 500000
-  eval_log_interval: 1000
+  log_interval_words: 10_000      
+  eval_log_interval: 1_000
   progress_bar: true
   words_per_second_window: 1000
   loss_spike_threshold: 2.0
