@@ -40,37 +40,10 @@ def _to_namespace(d: Dict[str, Any]) -> Any:
         return [_to_namespace(x) for x in d]
     return d
 
-def _load_pickle_from_hub(repo, filename):
-    """
-    Loads a pickle file stored in a Hugging Face dataset repo via Git LFS.
-    Handles both:
-      - list-of-dicts format: [{'input_ids': [...], 'attention_mask': [...]}, ...]
-      - dict-of-lists format: {'input_ids': [[...], [...]], 'attention_mask': [[...], [...]]}
-    Returns: list[dict]
-    """
-    path = hf_hub_download(
-        repo_id=repo,
-        filename=filename,
-        repo_type="dataset"  # important for HF dataset repos
-    )
+def _load_pickle_from_hub(repo_id: str, filename: str):
+    path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
     with open(path, "rb") as f:
-        data = pickle.load(f)
-
-    # Case 1: dict-of-lists → convert to list-of-dicts
-    if isinstance(data, dict) and "input_ids" in data and "attention_mask" in data:
-        data = [
-            {"input_ids": ids, "attention_mask": mask}
-            for ids, mask in zip(data["input_ids"], data["attention_mask"])
-        ]
-
-    # Case 2: already list-of-dicts → nothing to do
-    elif isinstance(data, list) and isinstance(data[0], dict):
-        pass
-
-    else:
-        raise ValueError(f"Unexpected pickle format in {filename}: {type(data)}")
-
-    return data
+        return pickle.load(f)
 
 def _load_datasets(cfg_ns):
     dtype = getattr(cfg_ns.data, "type", "hf")

@@ -25,6 +25,8 @@ class StructformerPoincare(nn.Module):
     max_length: int
     c: float = 1.0
     dropout_rate: float = 0.1
+    attention_input: str = "tangent"  # "tangent" (log-mapped) or "raw"
+
     
     def setup(self):
         # Hyperbolic embeddings (small init to stay well inside the ball)
@@ -68,17 +70,19 @@ class StructformerPoincare(nn.Module):
         # 1) Hyperbolic lookup + safety projection
         hyperbolic_embeds = self.embed_table[input_ids]                # [B, T, D]
         hyperbolic_embeds = poincare_proj(hyperbolic_embeds, self.c, eps_margin=1e-4)
-
+        
         # 2) Log-map to Euclidean at learned basepoint
         o = self.basepoint.value                                       # [D]
         euclidean_embeds = jax.vmap(jax.vmap(
             lambda x: log_map_at_basepoint(x, o, self.c), in_axes=0
         ), in_axes=0)(hyperbolic_embeds)                               # [B, T, D]
+        attn_input = euclidean_embeds if self.attention_input == "tangent" else hyperbolic_embeds
+        hyperbolic_for_bias = jax.lax.stop_gradient(hyperbolic_embeds)
 
         # 3) Add positional embeddings
         pos_ids = jnp.arange(T)[None, :]
         pos_emb = self.position_embeddings[pos_ids]                    # [1, T, D]
-        hidden_states = euclidean_embeds + pos_emb                     # [B, T, D]
+        hidden_states = attn_input + pos_emb                     # [B, T, D]
 
         # 4) Attention mask → large negative bias
         if attention_mask is None:
@@ -95,7 +99,7 @@ class StructformerPoincare(nn.Module):
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
-                hyperbolic_embeds,   # raw hyperbolic (used only for bias; stop-grad inside)
+                hyperbolic_for_bias,   # raw hyperbolic (used only for bias; stop-grad inside)
                 attention_bias,
                 training=training
             )

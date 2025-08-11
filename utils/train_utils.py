@@ -29,7 +29,7 @@ from utils.save_utils import save_checkpoint_branch
 from utils.retrieve_utils import create_data_iterator
 
 logger = logging.getLogger(__name__)
-_BATCH_STATS: Dict[str, Any] = {
+_BATCH_STATS: Dict[str, Any] = {}
 
 # ----------------------------
 # Training State Management
@@ -312,15 +312,18 @@ def compute_tree_regularizer_loss(
 # ----------------------------
 # Single-pass training step (VJP-based)
 # ----------------------------
-@partial(jax.jit, static_argnames=('model', 'config'))
+@partial(jax.jit, static_argnames=("model",))
 def train_step_single_pass(
-    dual_state: DualTrainState,
+    dual_state,
     batch: Dict[str, jnp.ndarray],
     model,
-    config,
+    c: float,
+    lambda_h: float,
+    lambda_tree: float,
+    tau: float,
     batch_stats: Optional[Dict[str, Any]] = None,
     tree_data: Optional[Dict[str, jnp.ndarray]] = None,
-) -> Tuple[DualTrainState, Dict[str, jnp.ndarray], Dict[str, Any]]:
+):
     """
     True single forward pass:
       1) Run forward once to get (logits, hyperbolic_embeds, new_batch_stats)
@@ -418,7 +421,7 @@ def train_step_single_pass(
 # ----------------------------
 # Eval
 # ----------------------------
-@partial(jax.jit, static_argnames=("model", "config"))
+@partial(jax.jit, static_argnames=("model",))
 def _eval_step_internal(
     dual_state: DualTrainState,
     batch: Dict[str, jnp.ndarray],

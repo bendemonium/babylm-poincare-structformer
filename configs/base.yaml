@@ -1,53 +1,47 @@
 seed: 42
 
-# Dataset and tokenizer settings
+# ---- Model (top-level keys; train.py reads these) ----
+vocab_name: gpt2
+max_length: 128
+hidden_dim: 256
+num_layers: 8
+num_heads: 8
+dropout_rate: 0.1
+c: 1.0
+pad_id: null
+attention_input: tangent
+
+# ---- Training (epochs for duration; eval/checkpoints are still word-based) ----
+training:
+  num_epochs: 4
+  max_words: 100_000_000          # metadata + for logging
+  batch_size: 128
+  eval_batch_size: 128
+  eval_interval_words: 1_000_000   # run eval ~every 1M words
+  lr_ce: 2.0e-4
+  lr_riem: 1.0e-4
+  lambda_h: 0.05
+  lambda_tree: 0.05
+  tau: 1.0
+  mode: structformer_poincare       # for dry runs: structformer_only / structformer_poincare
+
+# ---- Data ----
 data:
-  dataset_type: "pickle"  # Using pickle files from HF repos
+  type: pickle                      # "hf" or "pickle"
+  # if using HF datasets:
+  hf_repo_id: bendemonium/babylm25_bpe_tokens
+  repo_type: dataset
+  train_split: train
+  val_split: dev
+  # if using pickle (from HF Hub dataset repos):
   train_tokenized_repo: bendemonium/babylm25_bpe_tokens
   train_tokenized_file: train_tokenized.pkl
   val_tokenized_repo: bendemonium/babylm25_bpe_tokens
   val_tokenized_file: dev_tokenized.pkl
-  vocab_name: gpt2  # Tokenizer for vocab_size extraction
 
-# Model architecture hyperparameters
-model:
-  vocab_size: 50257  # GPT-2 tokenizer vocab size
-  hidden_dim: 256
-  num_heads: 8
-  num_layers: 4
-  max_length: 128  # renamed from seq_length for consistency
-  c: 1.0  # Hyperbolic geometry curvature parameter
-
-# Training hyperparameters - WORD-BASED (not epoch-based)
-training:
-  max_words: 100_000_000    # stop after this many "words" (words = 0.75 * non-pad tokens)
-  batch_size: 128
-  eval_batch_size: 64  # Separate eval batch size
-  
-  # Word-based training limits (BabyLM style) - FIXED
-  max_words: 100000000  # 100M words total - THIS WAS MISSING
-  eval_interval_words: 1000000  # Run validation every 1M words
-  
-  # Remove epoch-based settings since we're doing word-based training
-  # num_epochs: 5  # REMOVED
-  # save_interval: 1  # REMOVED  
-  # eval_interval: 1  # REMOVED
-
-# ---- Data ----
-data:
-  type: pickle                # hf or pickle
-  hf_repo_id: bendemonium/babylm25-bpe-tokens
-  train_split: train
-  val_split: dev 
-  # pickle
-  train_tokenized_repo: bendemonium/babylm25-bpe-tokens
-  train_tokenized_file: train_tokeinzed.pkl
-  val_tokenized_repo: bendemonium/babylm25-bpe-tokens
-  val_tokenized_file: dev_tokenized.pkl
-
-# ---- Checkpointing ----
+# ---- Checkpointing (single block) ----
 checkpointing:
-  output_repo_id: bendemonium/babylm-structformer-poincare # HF Hub model repo to push to
+  output_repo_id: bendemonium/babylm-structformer-poincare
   branch_prefix: checkpoint
   include_modeling_files:
     - models/structformer_poincare.py
@@ -56,37 +50,22 @@ checkpointing:
     - utils/logging_utils.py
     - utils/save_utils.py
   model_file: models/structformer_poincare.py
-  use_word_milestones: true   # for metadata purposes
-  max_words: 100_000_000      # mirrored for save metadata
+  use_word_milestones: true
+  max_words: 100_000_000
 
 # ---- Logging ----
 logging:
   log_dir: logs/structformer_run
   use_wandb: true
   wandb_project: structformer-flax
-  wandb_run_name: run-001
-  log_interval_words: 100000  # Log metrics every 100K words
-
-# Checkpoint & Export Configuration - Word milestone based
-checkpointing:
-  use_word_milestones: true  # Enable word-based checkpointing
-  max_words: 100000000  # 100M words
-  output_repo_id: "bendemonium/babylm-poincare-structformer" 
-  branch_prefix: "checkpoint"  # Will become "checkpoint_1M_words", etc.
-  include_modeling_files:
-    - "models/structformer_poincare.py"  # FIXED: was missing .py
-    - "models/hyperbolic_layers.py"
-  model_file: "models/structformer_poincare"
-
-# System Configuration
-system:
-  seed: 42
-  jax_device: "gpu"
-  precision: "float32"
-
-# Testing Configuration (for test_utils.py)
-testing:
-  test_batch_size: 2
-  test_seq_len: 8
-  test_vocab_size: 100
-  test_iterations: 50
+  wandb_run_name: run-babylm-poincare
+  console_log_level: INFO
+  file_log_level: DEBUG
+  log_interval_steps: 900
+  log_interval_words: 500000
+  eval_log_interval: 1000
+  progress_bar: true
+  words_per_second_window: 1000
+  loss_spike_threshold: 2.0
+  nan_alert: true
+  memory_alert_threshold_gb: 8.0

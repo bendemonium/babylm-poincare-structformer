@@ -1,0 +1,46 @@
+02:41:42 |     INFO | utils.logging_utils | ✅ W&B initialized: structformer-flax/run-babylm-poincare
+Send: curl -X HEAD -H 'Accept: */*' -H 'Accept-Encoding: identity' -H 'Connection: keep-alive' -H 'authorization: <TOKEN>' -H 'user-agent: unknown/None; hf_hub/0.34.4; python/3.10.12; torch/2.8.0' https://huggingface.co/datasets/bendemonium/babylm25-bpe-tokens/resolve/main/train_tokenized.pkl
+Request b9a6a89d-c3a0-48cf-9c24-b27a4237c797: HEAD https://huggingface.co/datasets/bendemonium/babylm25-bpe-tokens/resolve/main/train_tokenized.pkl (authenticated: True)
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/utils/_http.py", line 409, in hf_raise_for_status
+    response.raise_for_status()
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 404 Client Error: Not Found for url: https://huggingface.co/datasets/bendemonium/babylm25-bpe-tokens/resolve/main/train_tokenized.pkl
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 186, in <module>
+    main()
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 159, in main
+    train_ds, val_ds = _load_datasets(cfg)
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 62, in _load_datasets
+    return _load_pickle_from_hub(tr_repo, tr_file), _load_pickle_from_hub(va_repo, va_file)
+  File "/home/ubuntu/babylm-poincare-structformer/scripts/train.py", line 44, in _load_pickle_from_hub
+    path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1010, in hf_hub_download
+    return _hf_hub_download_to_cache_dir(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1117, in _hf_hub_download_to_cache_dir
+    _raise_on_head_call_error(head_call_error, force_download, local_files_only)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1658, in _raise_on_head_call_error
+    raise head_call_error
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1546, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 1463, in get_hf_file_metadata
+    r = _request_wrapper(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 286, in _request_wrapper
+    response = _request_wrapper(
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/file_download.py", line 310, in _request_wrapper
+    hf_raise_for_status(response)
+  File "/home/ubuntu/babylm-poincare-structformer/bb-env/lib/python3.10/site-packages/huggingface_hub/utils/_http.py", line 459, in hf_raise_for_status
+    raise _format(RepositoryNotFoundError, message, response) from e
+huggingface_hub.errors.RepositoryNotFoundError: 404 Client Error. (Request ID: Root=1-68995866-25ff27ad6156a6da3714aab7;b9a6a89d-c3a0-48cf-9c24-b27a4237c797)
+
+Repository Not Found for url: https://huggingface.co/datasets/bendemonium/babylm25-bpe-tokens/resolve/main/train_tokenized.pkl.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
