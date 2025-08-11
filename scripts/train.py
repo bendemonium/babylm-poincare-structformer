@@ -1,5 +1,5 @@
 """
-Train StructFormer (+ optional Poincare) on BabyLM-style data.
+Train StructFormer (+ optional Poincaré) on BabyLM-style data.
 
 Dry-run flags:
   --dry_run_structformer_only        -> training.mode = "structformer_only"
@@ -16,7 +16,7 @@ import os
 import argparse
 import pickle
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from types import SimpleNamespace
 
 import yaml
@@ -40,10 +40,11 @@ def _to_namespace(d: Any) -> Any:
         return [_to_namespace(x) for x in d]
     return d
 
+
 def _get(cfg: Any, path: str, default=None):
     """Safe getter for nested SimpleNamespace/dicts via dotted path (e.g., 'model.hidden_dim')."""
     cur = cfg
-    for part in path.split('.'):
+    for part in path.split("."):
         if isinstance(cur, SimpleNamespace) and hasattr(cur, part):
             cur = getattr(cur, part)
         elif isinstance(cur, dict) and part in cur:
@@ -52,48 +53,52 @@ def _get(cfg: Any, path: str, default=None):
             return default
     return cur
 
-def _load_pickle_from_hub(repo_id: str, filename: str):
-    """Download a pickle file from an HF dataset repo and load it."""
+
+def _maybe_int(x, default=None):
+    try:
+        return int(x)
+    except Exception:
+        return default
+
+
+def _load_pickle_from_hub(repo_id: str, filename: str) -> list:
+    """Download a pickle file from an HF dataset repo and load it as list[dict]."""
     path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
     with open(path, "rb") as f:
         data = pickle.load(f)
 
-    # Case 1: dict-of-lists → convert to list-of-dicts
+    # dict-of-lists -> list-of-dicts
     if isinstance(data, dict) and "input_ids" in data and "attention_mask" in data:
         data = [
             {"input_ids": ids, "attention_mask": mask}
             for ids, mask in zip(data["input_ids"], data["attention_mask"])
         ]
-
-    # Case 2: already list-of-dicts → nothing to do
-    elif isinstance(data, list) and isinstance(data[0], dict):
+    elif isinstance(data, list) and data and isinstance(data[0], dict):
         pass
-
     else:
         raise ValueError(f"Unexpected pickle format in {filename}: {type(data)}")
-
     return data
 
-def _load_datasets(cfg_ns):
+
+def _load_datasets(cfg_ns: Any):
+    """Load train/val datasets. Supports HF repos (with optional data_dir) and pickle files on HF."""
     dtype = getattr(cfg_ns.data, "type", "hf")
+    data_dir = getattr(cfg_ns.data, "data_dir", None)
 
     if dtype == "hf":
         repo_id = cfg_ns.data.hf_repo_id
         train_split = getattr(cfg_ns.data, "train_split", "train")
         val_split = getattr(cfg_ns.data, "val_split", "validation")
 
-        def is_slice(s: str) -> bool:
-            # crude but reliable: slices contain ':' or '['
+        def _is_slice(s: str) -> bool:
             return (":" in s) or ("[" in s) or ("]" in s)
 
-        if is_slice(train_split) or is_slice(val_split):
-            # Load each split separately via the `split=` arg
-            train_ds = load_dataset(repo_id, split=train_split)
-            val_ds = load_dataset(repo_id, split=val_split)
+        if _is_slice(train_split) or _is_slice(val_split):
+            train_ds = load_dataset(repo_id, data_dir=data_dir, split=train_split)
+            val_ds = load_dataset(repo_id, data_dir=data_dir, split=val_split)
             return train_ds, val_ds
         else:
-            # Normal DatasetDict lookup
-            ds = load_dataset(repo_id)
+            ds = load_dataset(repo_id, data_dir=data_dir)
             return ds[train_split], ds[val_split]
 
     elif dtype == "pickle":
@@ -108,12 +113,6 @@ def _load_datasets(cfg_ns):
     else:
         raise ValueError(f"Unknown data.type: {dtype}")
 
-def _maybe_int(x, default=None):
-    try:
-        return int(x)
-    except Exception:
-        return default
-
 
 # ---------------------------
 # Main
@@ -127,7 +126,7 @@ def main():
     parser.add_argument("--dry_run_structformer_only", action="store_true",
                         help="Ablation: StructFormer only (Euclidean), skip Poincaré losses/updates")
     parser.add_argument("--dry_run_structformer_poincare", action="store_true",
-                        help="Ablation: StructFormer + Poincare (full pipeline) but short run")
+                        help="Ablation: StructFormer + Poincaré (full pipeline) but short run")
     args = parser.parse_args()
 
     # Load config
@@ -189,7 +188,6 @@ def main():
     dropout     = _get(cfg, "model.dropout_rate", _get(cfg, "dropout_rate", 0.1))
 
     # Build model
-    # Only pass 'attention_input' if the model actually accepts it
     attention_input = _get(cfg, "attention_input", None)
     try:
         if attention_input is None:
@@ -203,7 +201,6 @@ def main():
                 dropout_rate=dropout,
             )
         else:
-            # Some forks may accept this kwarg
             model = StructformerPoincare(
                 vocab_size=tok.vocab_size,
                 hidden_dim=hidden_dim,
@@ -212,10 +209,10 @@ def main():
                 max_length=max_length,
                 c=curvature_c,
                 dropout_rate=dropout,
-                attention_input=attention_input,  # try; will fail if model doesn't accept it
+                attention_input=attention_input,
             )
     except TypeError:
-        # Fallback: construct without that optional kwarg
+        # Fallback if your local class doesn't accept attention_input
         model = StructformerPoincare(
             vocab_size=tok.vocab_size,
             hidden_dim=hidden_dim,
@@ -256,7 +253,7 @@ def main():
         str(cfg.pad_id),
     )
 
-    # Train (epochs-based; eval/checkpoints are word-based inside train_utils)
+    # Train
     _ = train_structformer_poincare(
         model=model,
         config=cfg,
@@ -271,18 +268,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # basic logging setup if caller didn't configure root logger
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
     main()
-
-# python scripts/train.py \
-#   --config configs/base.yaml \
-#   --dry_run_structformer_only \
-#   --output_dir runs/dry_structformer_only
-
-# python scripts/train.py \
-#   --config configs/base.yaml \
-#   --dry_run_structformer_poincare \
-#   --output_dir runs/dry_structformer_poincare
-
-# python scripts/train.py \
-#   --config configs/base.yaml \
-#   --output_dir runs/full_structformer_poincare

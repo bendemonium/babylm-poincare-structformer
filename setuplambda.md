@@ -74,7 +74,7 @@ training dry runs
 ```
 # cheap dry run
 python scripts/train.py \
-  --config configs/base.yaml \
+  --config configs/dry_structformer_only.yaml \
   --dry_run_structformer_only \
   --output_dir runs/dry_structformer_only
 ```
@@ -82,7 +82,7 @@ python scripts/train.py \
 ```
 # full dry run
 python scripts/train.py \
-  --config configs/base.yaml \
+  --config configs/dry_full_poincare.yaml \
   --dry_run_structformer_poincare \
   --output_dir runs/dry_structformer_poincare
 ```

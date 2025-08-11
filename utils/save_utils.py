@@ -1,6 +1,23 @@
 """
-Save utilities for StructFormer + Poincare training
-Handles checkpointing, HuggingFace Hub uploads, and model serialization
+Save utilities for StructFormer + Poincaré training.
+Handles:
+  • Local checkpoints
+  • HF Hub branch uploads (fully Transformers/Flax-compatible)
+  • Final model export
+
+On each branch upload we include:
+  - config.json (HF-style, with architectures)
+  - flax_model.safetensors        (primary Flax weights format)
+  - flax_model.msgpack            (legacy Flax weights, for broad compatibility)
+  - model_params.flax             (legacy file name our older tools expect)
+  - opt_state_embed.flax / opt_state_other.flax (optional optimizer states)
+  - training_metadata.json
+  - README.md
+  - (optional) modeling source files (for trust_remote_code=True)
+
+Notes:
+- Tokenizer artifacts are NOT uploaded by default since we use the stock "gpt2" tokenizer.
+- If you ever change vocab/merges/special tokens, upload tokenizer files alongside the branch.
 """
 
 import os
@@ -12,7 +29,6 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 
 import jax
-import jax.numpy as jnp
 from flax.training import checkpoints
 from flax.serialization import to_bytes, from_bytes
 
@@ -24,89 +40,89 @@ from huggingface_hub import (
 )
 from huggingface_hub.errors import HfHubHTTPError
 from safetensors.flax import save_file as save_safetensors
-from transformers import PretrainedConfig
-
-from models.hyperbolic_geometry import hyperbolic_diagnostics
 
 logger = logging.getLogger(__name__)
 
-# ----------------------------
+# =============================================================================
 # Helpers
-# ----------------------------
+# =============================================================================
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 def _is_jax_array(x: Any) -> bool:
-    # Compatible with recent JAX (unified Array), but doesn’t crash on older versions
+    # Works across recent JAX versions (Array) and older DeviceArray naming.
     return isinstance(x, jax.Array) or x.__class__.__name__ in {"Array", "DeviceArray"}
 
-def make_json_serializable(obj):
+def make_json_serializable(obj: Any) -> Any:
     """
-    Recursively convert objects to JSON-serializable format.
-    Keeps large arrays summarized instead of dumping GBs into JSON.
+    Recursively convert objects to JSON-serializable forms.
+    Summarizes large arrays to avoid huge JSON files.
     """
-    if hasattr(obj, "__dict__") and not isinstance(obj, dict):
-        return {k: make_json_serializable(v) for k, v in obj.__dict__.items()}
-    if hasattr(obj, "_asdict"):
-        return {k: make_json_serializable(v) for k, v in obj._asdict().items()}
-    if isinstance(obj, dict):
-        return {k: make_json_serializable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [make_json_serializable(v) for v in obj]
-    if _is_jax_array(obj):
-        try:
-            size = int(obj.size)
-            if size <= 100:
-                return obj.tolist()
-            return f"jax.Array(shape={tuple(obj.shape)}, dtype={obj.dtype})"
-        except Exception:
-            return "jax.Array"
-    if isinstance(obj, (int, float, str, bool)) or obj is None:
-        return obj
-    return str(obj)
+    try:
+        if hasattr(obj, "__dict__") and not isinstance(obj, dict):
+            return {k: make_json_serializable(v) for k, v in obj.__dict__.items()}
+        if hasattr(obj, "_asdict"):
+            return {k: make_json_serializable(v) for k, v in obj._asdict().items()}
+        if isinstance(obj, dict):
+            return {k: make_json_serializable(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [make_json_serializable(v) for v in obj]
+        if _is_jax_array(obj):
+            try:
+                size = int(obj.size)
+                if size <= 100:
+                    return obj.tolist()
+                return f"jax.Array(shape={tuple(obj.shape)}, dtype={obj.dtype})"
+            except Exception:
+                return "jax.Array"
+        if isinstance(obj, (int, float, str, bool)) or obj is None:
+            return obj
+        return str(obj)
+    except Exception:
+        return str(obj)
 
 def sanitize(obj: Any) -> Any:
-    """Sanitize objects (e.g., JAX arrays) for JSON serialization."""
     return make_json_serializable(obj)
 
-# ----------------------------
-# Config & metadata
-# ----------------------------
-class CheckpointConfig:
-    """Small helper if you need to wrap raw dict configs."""
-    def __init__(self, config_dict):
-        self.checkpointing = config_dict.get("checkpointing", {})
-        self.use_word_milestones = self.checkpointing.get("use_word_milestones", True)
-        self.max_words = self.checkpointing.get("max_words", 100_000_000)
-        self.output_repo_id = self.checkpointing.get("output_repo_id")
-        self.branch_prefix = self.checkpointing.get("branch_prefix", "checkpoint")
-        self.include_modeling_files = self.checkpointing.get("include_modeling_files", [])
-        self.model_file = self.checkpointing.get("model_file", "models/structformer_poincare.py")
+# =============================================================================
+# HF config.json (Transformers-compatible)
+# =============================================================================
 
-        self.logging = config_dict.get("logging", {})
-        self.log_dir = self.logging.get("log_dir", "logs/structformer_run")
-
-def write_config(config, save_dir: str, model_file: Optional[str] = None):
+def build_hf_config_dict(cfg: Any) -> dict:
     """
-    Write configuration to JSON (with metadata).
-    Accepts either a dict-like or a SimpleNamespace.
+    Build a Transformers-compatible config.json.
+    Expects a SimpleNamespace-like object with attributes used below.
     """
-    os.makedirs(save_dir, exist_ok=True)
-    cfg = make_json_serializable(config)
-    cfg["_metadata"] = {
+    return {
         "model_type": "structformer_poincare",
-        "framework": "jax_flax",
-        "model_file": model_file,
-        "created_at": _now_iso(),
+        "architectures": ["FlaxStructformerPoincareForMaskedLM"],  # used by AutoModel to pick class
+        "hidden_dim": int(getattr(cfg, "hidden_dim", 256)),
+        "num_layers": int(getattr(cfg, "num_layers", 8)),
+        "num_heads": int(getattr(cfg, "num_heads", 8)),
+        "max_length": int(getattr(cfg, "max_length", 128)),
+        "dropout_rate": float(getattr(cfg, "dropout_rate", 0.1)),
+        "c": float(getattr(cfg, "c", 1.0)),
+        "attention_input": getattr(cfg, "attention_input", "tangent"),
+        "pad_token_id": int(getattr(cfg, "pad_id", 50256)),  # GPT-2 often uses eos as pad
+        # Optional / informational:
+        "task_specific_params": {"masked-language-modeling": {}},
+        "torch_dtype": "float32",
     }
+
+def write_hf_config_json(cfg: Any, save_dir: str) -> str:
+    os.makedirs(save_dir, exist_ok=True)
+    cfg_dict = build_hf_config_dict(cfg)
     path = os.path.join(save_dir, "config.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, ensure_ascii=False)
-    logger.info("✅ Config saved to %s", path)
+        json.dump(cfg_dict, f, indent=2, ensure_ascii=False)
+    logger.info("✅ HF config.json written to %s", path)
+    return path
 
-# ----------------------------
+# =============================================================================
 # Local checkpoints (Flax)
-# ----------------------------
+# =============================================================================
+
 def save_flax_checkpoint(
     params: Dict,
     opt_state_embed: Any,
@@ -114,9 +130,9 @@ def save_flax_checkpoint(
     step: int,
     save_dir: str,
     prefix: str = "checkpoint",
-):
+) -> None:
     """
-    Save a checkpoint containing params and both optimizer states.
+    Save a local Flax checkpoint with params + optimizer states.
     """
     os.makedirs(save_dir, exist_ok=True)
     target = {
@@ -125,7 +141,6 @@ def save_flax_checkpoint(
         "opt_state_other": opt_state_other,
         "step": int(step),
         "framework": "jax_flax",
-        "model_type": "structformer_poincare",
     }
     checkpoints.save_checkpoint(
         ckpt_dir=save_dir,
@@ -143,7 +158,7 @@ def load_flax_checkpoint(
     prefix: str = "checkpoint",
 ) -> Optional[Dict]:
     """
-    Load a checkpoint (latest if step is None).
+    Load a local Flax checkpoint (latest if step is None).
     """
     if not os.path.exists(ckpt_dir):
         logger.warning("Checkpoint directory not found: %s", ckpt_dir)
@@ -160,46 +175,11 @@ def load_flax_checkpoint(
     logger.info("✅ Loaded checkpoint from %s, step %s", ckpt_dir, data.get("step", "unknown"))
     return data
 
-def save_training_state(
-    params: Dict,
-    opt_state_embed: Any,
-    opt_state_other: Any,
-    metrics: Dict,
-    config: Any,
-    step: int,
-    words_processed: int,
-    save_dir: str,
-):
-    """
-    Save checkpoint + metrics/config snapshot.
-    """
-    os.makedirs(save_dir, exist_ok=True)
+# =============================================================================
+# HF Hub helpers
+# =============================================================================
 
-    # 1) Checkpoint
-    save_flax_checkpoint(params, opt_state_embed, opt_state_other, step, save_dir, prefix="training_state")
-
-    # 2) Training info (metrics & counters)
-    training_info = {
-        "step": int(step),
-        "words_processed": int(words_processed),
-        "metrics": make_json_serializable(metrics),
-        "timestamp": _now_iso(),
-    }
-    info_path = os.path.join(save_dir, "training_info.json")
-    with open(info_path, "w", encoding="utf-8") as f:
-        json.dump(training_info, f, indent=2, ensure_ascii=False)
-
-    # 3) Config
-    write_config(config, save_dir)
-    logger.info("✅ Training state saved to %s", save_dir)
-
-# ----------------------------
-# Hugging Face Hub
-# ----------------------------
-def _ensure_hf_repo(repo_id: str, private: bool = True, repo_type: str = "model"):
-    """
-    Create the HF repo if needed. No-op if it already exists.
-    """
+def _ensure_hf_repo(repo_id: str, private: bool = True, repo_type: str = "model") -> None:
     api = HfApi()
     try:
         _ = api.repo_info(repo_id=repo_id, repo_type=repo_type)
@@ -210,108 +190,34 @@ def _ensure_hf_repo(repo_id: str, private: bool = True, repo_type: str = "model"
     create_repo(repo_id=repo_id, private=private, repo_type=repo_type, exist_ok=True)
     logger.info("✅ Created HF repo: %s", repo_id)
 
-def _ensure_hf_branch(repo_id: str, branch: str, repo_type: str = "model"):
-    """
-    Create the branch if missing. Ignore 409 (already exists).
-    """
+def _ensure_hf_branch(repo_id: str, branch: str, repo_type: str = "model") -> None:
     api = HfApi()
     try:
         api.create_branch(repo_id=repo_id, branch=branch, repo_type=repo_type)
         logger.info("✅ Created branch %s for %s", branch, repo_id)
     except HfHubHTTPError as e:
-        # 409 Conflict -> already exists
         if getattr(e, "response", None) is not None and e.response.status_code == 409:
+            # Already exists
             logger.info("Branch %s already exists for %s", branch, repo_id)
         else:
             raise
 
-def build_hf_config_dict(cfg) -> dict:
-    # cfg is your SimpleNamespace-like config (top-level)
-    training = getattr(cfg, "training", None)
-
-    return {
-        "model_type": "structformer_poincare",
-        "architectures": ["FlaxStructformerPoincareForMaskedLM"],
-        "vocab_size": getattr(cfg, "vocab_size", None),  # if you want to set it; else tokenizer will define it
-        "hidden_dim": int(getattr(cfg, "hidden_dim", 256)),
-        "num_layers": int(getattr(cfg, "num_layers", 8)),
-        "num_heads": int(getattr(cfg, "num_heads", 8)),
-        "max_length": int(getattr(cfg, "max_length", 128)),
-        "dropout_rate": float(getattr(cfg, "dropout_rate", 0.1)),
-        "c": float(getattr(cfg, "c", 1.0)),
-        "attention_input": getattr(cfg, "attention_input", "tangent"),
-        "pad_token_id": getattr(cfg, "pad_id", 50256),
-        # standard fields HF likes
-        "task_specific_params": {"masked-language-modeling": {}},
-        "torch_dtype": "float32",   # harmless placeholder
-    }
-
-def write_hf_config_json(cfg, save_dir: str):
-    os.makedirs(save_dir, exist_ok=True)
-    cfg_dict = build_hf_config_dict(cfg)
-    path = os.path.join(save_dir, "config.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(cfg_dict, f, indent=2, ensure_ascii=False)
-    logger.info(f"✅ HF config.json written to {path}")
-
-def build_hf_config_dict(cfg) -> dict:
-    # cfg is your SimpleNamespace-like config (top-level)
-    training = getattr(cfg, "training", None)
-
-    return {
-        "model_type": "structformer_poincare",
-        "architectures": ["FlaxStructformerPoincareForMaskedLM"],
-        "vocab_size": getattr(cfg, "vocab_size", None),  # if you want to set it; else tokenizer will define it
-        "hidden_dim": int(getattr(cfg, "hidden_dim", 256)),
-        "num_layers": int(getattr(cfg, "num_layers", 8)),
-        "num_heads": int(getattr(cfg, "num_heads", 8)),
-        "max_length": int(getattr(cfg, "max_length", 128)),
-        "dropout_rate": float(getattr(cfg, "dropout_rate", 0.1)),
-        "c": float(getattr(cfg, "c", 1.0)),
-        "attention_input": getattr(cfg, "attention_input", "tangent"),
-        "pad_token_id": getattr(cfg, "pad_id", 50256),
-        # standard fields HF likes
-        "task_specific_params": {"masked-language-modeling": {}},
-        "torch_dtype": "float32",   # harmless placeholder
-    }
-
-def write_hf_config_json(cfg, save_dir: str):
-    os.makedirs(save_dir, exist_ok=True)
-    cfg_dict = build_hf_config_dict(cfg)
-    path = os.path.join(save_dir, "config.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(cfg_dict, f, indent=2, ensure_ascii=False)
-    logger.info(f"✅ HF config.json written to {path}")
-
-def copy_modeling_files(source_files: List[str], target_dir: str):
+def copy_modeling_files(source_files: List[str], target_dir: str) -> None:
     """
-    Copy selected modeling files into upload folder.
+    Copy selected modeling files into upload folder for trust_remote_code=True.
     """
     for src in source_files or []:
         if not os.path.exists(src):
             logger.warning("Modeling file not found: %s", src)
             continue
-        rel = os.path.normpath(src)  # keep relative structure as given
-        dst = os.path.join(target_dir, rel)
+        dst = os.path.join(target_dir, os.path.normpath(src))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
         logger.info("Copied %s → %s", src, dst)
 
-from huggingface_hub import HfApi, create_repo, upload_folder
-
-def _ensure_model_repo_and_branch(repo_id: str, branch_name: str, private: bool = True):
-    api = HfApi()
-    # ensure repo exists
-    try:
-        api.repo_info(repo_id=repo_id, repo_type="model")
-    except Exception:
-        create_repo(repo_id=repo_id, repo_type="model", private=private, exist_ok=True)
-    # ensure branch exists
-    try:
-        api.create_branch(repo_id=repo_id, branch=branch_name, repo_type="model")
-    except Exception:
-        # branch probably already exists; ignore
-        pass
+# =============================================================================
+# Branch upload (HF-compatible)
+# =============================================================================
 
 def save_checkpoint_branch(
     params: Dict,
@@ -322,37 +228,48 @@ def save_checkpoint_branch(
     model_file: Optional[str] = None,
     opt_state_embed: Any = None,
     opt_state_other: Any = None,
-    metrics: Dict = None,
+    metrics: Optional[Dict] = None,
     step: int = 0,
     words_processed: int = 0,
-):
+) -> None:
     """
     Package and upload a checkpoint to a specific Hub branch.
-    """
-    logger.info(f"Saving checkpoint to branch {branch_name}...")
 
-    # --- Ensure the target HF model repo exists (inline, no external helper) ---
-    api = HfApi()
-    try:
-        api.repo_info(repo_id, repo_type="model")
-        logger.info(f"Repository {repo_id} already exists")
-    except Exception:
-        logger.info(f"Creating Hugging Face model repo: {repo_id}")
-        create_repo(repo_id=repo_id, private=True, repo_type="model", exist_ok=True)
-        # best-effort ensure main branch (usually auto-created)
-        try:
-            api.create_branch(repo_id, branch="main", repo_type="model")
-        except Exception:
-            pass
-    # --------------------------------------------------------------------------
+    Files written:
+      - config.json
+      - flax_model.safetensors
+      - flax_model.msgpack
+      - model_params.flax
+      - opt_state_embed.flax (optional)
+      - opt_state_other.flax (optional)
+      - training_metadata.json
+      - README.md
+      - (optional) modeling files
+    """
+    logger.info("Saving checkpoint to branch %s...", branch_name)
+    _ensure_hf_repo(repo_id, private=True, repo_type="model")
+    _ensure_hf_branch(repo_id, branch_name, repo_type="model")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # 1) Params
-        params_path = os.path.join(tmp_dir, "model_params.flax")
-        with open(params_path, "wb") as f:
+        # 1) HF config.json (Transformers reads this)
+        write_hf_config_json(config, tmp_dir)
+
+        # 2) Flax weights — primary: safetensors; also include msgpack + legacy file name.
+        #    a) flax_model.safetensors
+        safetensors_path = os.path.join(tmp_dir, "flax_model.safetensors")
+        save_safetensors(params, safetensors_path)
+
+        #    b) flax_model.msgpack (Transformers still supports this format broadly)
+        flax_msgpack_path = os.path.join(tmp_dir, "flax_model.msgpack")
+        with open(flax_msgpack_path, "wb") as f:
             f.write(to_bytes(params))
 
-        # 2) Opt states
+        #    c) model_params.flax (legacy name some of our internal tools used)
+        legacy_params_path = os.path.join(tmp_dir, "model_params.flax")
+        with open(legacy_params_path, "wb") as f:
+            f.write(to_bytes(params))
+
+        # 3) Optimizer states (optional)
         if opt_state_embed is not None:
             with open(os.path.join(tmp_dir, "opt_state_embed.flax"), "wb") as f:
                 f.write(to_bytes(opt_state_embed))
@@ -360,77 +277,79 @@ def save_checkpoint_branch(
             with open(os.path.join(tmp_dir, "opt_state_other.flax"), "wb") as f:
                 f.write(to_bytes(opt_state_other))
 
-        # 3) Config
-        write_config(config, tmp_dir, model_file)
-
-        # 4) Metadata
+        # 4) Training metadata (useful for dashboards / resume)
         metadata = {
             "step": int(step),
             "words_processed": int(words_processed),
             "branch_name": branch_name,
-            "model_type": "structformer_poincare",
             "framework": "jax_flax",
             "timestamp": _now_iso(),
         }
-        try:
-            embed = None
-            if isinstance(params, dict) and "embed_table" in params:
-                embed = params["embed_table"]
-            elif isinstance(params, dict) and "params" in params and isinstance(params["params"], dict):
-                if "embed_table" in params["params"]:
-                    embed = params["params"]["embed_table"]
-            if embed is not None:
-                metadata["hyperbolic_diagnostics"] = make_json_serializable(
-                    hyperbolic_diagnostics(embed, getattr(config, "c", 1.0))
-                )
-        except Exception:
-            pass
+        if metrics is not None:
+            metadata["metrics"] = make_json_serializable(metrics)
 
         with open(os.path.join(tmp_dir, "training_metadata.json"), "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-        # 5) Modeling files
+        # 5) Optional modeling files (for trust_remote_code=True)
         if include_modeling_files:
             copy_modeling_files(include_modeling_files, tmp_dir)
 
-        # 6) README
-        readme = f"""# StructFormer + Poincaré Checkpoint
+        # 6) README (model card-lite)
+        readme = f"""# StructFormer + Poincaré — Checkpoint
 
-Checkpoint from training StructFormer with Poincaré (hyperbolic) embeddings.
+Checkpoint saved during training.
 
-## Details
-- **Framework**: JAX/Flax
-- **Model Type**: StructFormer + Poincaré
-- **Training Step**: {step:,}
-- **Words Processed**: {words_processed:,}
-- **Branch**: {branch_name}
-- **Timestamp**: {metadata['timestamp']}
+**Repo**: `{repo_id}`  
+**Branch**: `{branch_name}`  
+**Step**: {step:,}  
+**Words processed**: {words_processed:,}  
+**Timestamp**: {metadata['timestamp']}
 
+## Load (Flax)
+
+```python
+from transformers import AutoTokenizer, FlaxAutoModelForMaskedLM
+import jax.numpy as jnp
+
+repo = "{repo_id}"
+branch = "{branch_name}"
+
+# Using stock GPT-2 tokenizer (unchanged)
+tok = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+
+model = FlaxAutoModelForMaskedLM.from_pretrained(
+    repo, revision=branch, trust_remote_code=True, dtype=jnp.float32
+)
+```
 ## Files
-- `model_params.flax`
-- `opt_state_embed.flax` (optional)
-- `opt_state_other.flax` (optional)
-- `config.json`
+- `config.json`                (Transformers config)
+- `flax_model.safetensors`     (Flax weights, primary)
+- `flax_model.msgpack`         (Flax weights, legacy msgpack)
+- `model_params.flax`          (legacy filename kept for internal tools)
+- `opt_state_embed.flax`       (optional)
+- `opt_state_other.flax`       (optional)
 - `training_metadata.json`
-- modeling code (if included)
+- modeling source files (if included)
 """
         with open(os.path.join(tmp_dir, "README.md"), "w", encoding="utf-8") as f:
             f.write(readme)
 
-            # 7) Upload to the branch (created if missing)
-            logger.info(f"[HF upload] repo={repo_id} branch={branch_name}")
-            _ensure_model_repo_and_branch(repo_id, branch_name, private=True)
+        # 7) Upload to the branch
+        logger.info("[HF upload] repo=%s branch=%s", repo_id, branch_name)
+        upload_folder(
+            folder_path=tmp_dir,
+            repo_id=repo_id,
+            repo_type="model",
+            revision=branch_name,  # branch already ensured
+            commit_message=f"Checkpoint at {words_processed:,} words (step {step:,})",
+            create_pr=False,
+        )
+        logger.info("✅ Checkpoint saved to %s/%s", repo_id, branch_name)
 
-            # final upload
-            upload_folder(
-                folder_path=tmp_dir,
-                repo_id=repo_id,
-                repo_type="model",
-                revision=branch_name,  # safe now that we ensured it exists
-                commit_message=f"Checkpoint at {words_processed:,} words (step {step:,})",
-                create_pr=False,
-            )
-            logger.info(f"✅ Checkpoint saved to {repo_id}/{branch_name}")
+# =============================================================================
+# Resume from Hub
+# =============================================================================
 
 def load_checkpoint_from_hub(
     repo_id: str,
@@ -439,6 +358,8 @@ def load_checkpoint_from_hub(
 ) -> Optional[Dict]:
     """
     Download a branch snapshot and read params/opt states/metadata/config.
+    Prefers `flax_model.msgpack` / `model_params.flax` for internal resume.
+    (Transformers will handle safetensors automatically on its side.)
     """
     try:
         logger.info("Loading checkpoint from %s/%s...", repo_id, branch_name)
@@ -446,13 +367,24 @@ def load_checkpoint_from_hub(
 
         data: Dict[str, Any] = {"local_dir": local_dir}
 
-        # Params
-        pth = os.path.join(local_dir, "model_params.flax")
-        if os.path.exists(pth):
-            with open(pth, "rb") as f:
-                data["params"] = from_bytes(None, f.read())
+        # Prefer msgpack for internal resume:
+        p_msgpack = os.path.join(local_dir, "flax_model.msgpack")
+        p_legacy  = os.path.join(local_dir, "model_params.flax")
 
-        # Opt states
+        params_bytes = None
+        if os.path.exists(p_msgpack):
+            with open(p_msgpack, "rb") as f:
+                params_bytes = f.read()
+        elif os.path.exists(p_legacy):
+            with open(p_legacy, "rb") as f:
+                params_bytes = f.read()
+
+        if params_bytes is not None:
+            data["params"] = from_bytes(None, params_bytes)
+        else:
+            logger.warning("No msgpack params found in %s (will rely on safetensors via Transformers).", local_dir)
+
+        # Optimizer states (optional)
         if load_optimizer_states:
             ep = os.path.join(local_dir, "opt_state_embed.flax")
             if os.path.exists(ep):
@@ -479,9 +411,10 @@ def load_checkpoint_from_hub(
         logger.error("Failed to load checkpoint from hub: %s", str(e))
         return None
 
-# ----------------------------
+# =============================================================================
 # Milestones & cleanup
-# ----------------------------
+# =============================================================================
+
 def get_word_milestone_name(words_processed: int) -> str:
     if words_processed >= 1_000_000:
         return f"checkpoint_{words_processed // 1_000_000}M_words"
@@ -496,7 +429,7 @@ def should_save_checkpoint(
 ) -> bool:
     return (words_processed - last_checkpoint_words) >= checkpoint_interval_words
 
-def cleanup_old_checkpoints(checkpoint_dir: str, keep_n: int = 5):
+def cleanup_old_checkpoints(checkpoint_dir: str, keep_n: int = 5) -> None:
     try:
         if not os.path.exists(checkpoint_dir):
             return
@@ -519,53 +452,60 @@ def cleanup_old_checkpoints(checkpoint_dir: str, keep_n: int = 5):
     except Exception as e:
         logger.error("Failed to cleanup checkpoints: %s", str(e))
 
-# ----------------------------
-# Final model export
-# ----------------------------
+# =============================================================================
+# Final model export (optional local artifact)
+# =============================================================================
+
 def save_final_model(
     params: Dict,
     config: Any,
-    tokenizer,
+    tokenizer,  # optional; we usually rely on "gpt2" upstream
     save_dir: str,
-    create_hf_compatible: bool = True,
-):
+) -> None:
     """
-    Save final model (Flax params + config + tokenizer + README).
+    Save a local, HF-compatible Flax export (not uploaded automatically).
+    Includes:
+      - config.json
+      - flax_model.safetensors
+      - flax_model.msgpack
+      - (optional) tokenizer files if provided
+      - README.md
     """
     os.makedirs(save_dir, exist_ok=True)
 
-    # Params
-    with open(os.path.join(save_dir, "model.flax"), "wb") as f:
+    # Config
+    write_hf_config_json(config, save_dir)
+
+    # Weights (both formats)
+    save_safetensors(params, os.path.join(save_dir, "flax_model.safetensors"))
+    with open(os.path.join(save_dir, "flax_model.msgpack"), "wb") as f:
         f.write(to_bytes(params))
 
-    # Config
-    write_config(config, save_dir)
-
-    # Tokenizer
+    # Tokenizer (optional – not required if using stock GPT-2 unchanged)
     if tokenizer is not None:
         tokenizer.save_pretrained(save_dir)
 
-    # Model card
-    model_card = """---
-    language: en
-    tags: [structformer, hyperbolic, poincare, language-modeling, babylm]
-    license: mit
-    ---
+    # Model card-lite
+    model_card = f"""# StructFormer + Poincaré (Flax)
 
-    # StructFormer + Poincaré Embeddings
+Local export created at { _now_iso() }.
 
-    A model combining StructFormer’s structure induction with Poincaré (hyperbolic) token embeddings.
+Files:
+- `config.json`
+- `flax_model.safetensors`
+- `flax_model.msgpack`
+- tokenizer files (if provided)
 
-    ## Training
-    - Framework: JAX/Flax
-    - Optimization: Dual (AdamW for model, Riemannian for embeddings)
-    - Losses: Cross-entropy + Hyperbolic regularizers
+## Load (Flax)
+```python
+from transformers import AutoTokenizer, FlaxAutoModelForMaskedLM
+import jax.numpy as jnp
 
-    ## Loading
-    """
-    model_card += "```python\n"
-    model_card += "from flax.serialization import from_bytes\n"
-    model_card += "with open('model.flax','rb') as f:\n"
-    model_card += "    params = from_bytes(None, f.read())\n"
-    model_card += "# Instantiate your model class with the same config used for training.\n"
-    model_card += "```\n"
+tok = AutoTokenizer.from_pretrained("{'gpt2' if tokenizer is None else save_dir}", use_fast=True)
+model = FlaxAutoModelForMaskedLM.from_pretrained("{save_dir}", trust_remote_code=True, dtype=jnp.float32)
+```
+"""
+    with open(os.path.join(save_dir, "README.md"), "w", encoding="utf-8") as f:
+        f.write(model_card)
+
+    logger.info("✅ Final model saved to %s", save_dir)
