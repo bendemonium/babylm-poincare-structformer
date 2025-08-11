@@ -39,7 +39,7 @@ data:
 
 # ---- Checkpointing ----
 checkpointing:
-  output_repo_id: bendemonium/babylm-structformer-poincare
+  output_repo_id: bendemonium/babylm-poincare-structformer
   branch_prefix: checkpoint
   include_modeling_files:
     - models/structformer_poincare.py
